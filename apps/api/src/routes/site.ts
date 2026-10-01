@@ -23,6 +23,7 @@ import { listReports, loadReport, reportNavigation, loadReportNavigation, loadRe
 import { loadSiteCodexResetPage, loadSiteCodexResetDay } from "@aihot/backend/publication/monitor";
 import { codexResetVersion } from "@aihot/backend/monitor/read";
 import { cached } from "@aihot/backend/lib/cache";
+import { loadClaims, loadDemandThemes } from "@aihot/backend/publication/insights";
 import { looseQuery, sendJsonWithEtag, sendProblem } from "../http/respond.ts";
 
 type Handler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -162,6 +163,18 @@ export function registerSite(app: FastifyInstance) {
 
   app.get("/api/site/stats", siteHandler(async (req, reply) => {
     return sendJsonWithEtag(req, reply, await loadSiteStats(), { etagPrefix: "stats", cacheControl: "public, max-age=300, s-maxage=300" });
+  }));
+
+  app.get("/api/site/demands", siteHandler(async (req, reply) => {
+    const q = looseQuery(req);
+    const data = await loadDemandThemes({ q: q.q ?? null, limit: Number(q.limit) || 50 });
+    return sendJsonWithEtag(req, reply, data, { etagPrefix: "demands", cacheControl: "public, max-age=30, s-maxage=60" });
+  }));
+
+  app.get("/api/site/claims", siteHandler(async (req, reply) => {
+    const q = looseQuery(req);
+    const data = await loadClaims({ q: q.q ?? null, status: q.status ?? null, limit: Number(q.limit) || 100 });
+    return sendJsonWithEtag(req, reply, data, { etagPrefix: "claims", cacheControl: "public, max-age=30, s-maxage=60" });
   }));
 
   app.get("/api/site/changelog", siteHandler(async (req, reply) => {
