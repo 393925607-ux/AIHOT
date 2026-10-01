@@ -8,6 +8,8 @@ export default [
   route("items/:id", "routes/item.tsx"),
   route("items/:id/original", "routes/item-original.tsx", { id: "item-original" }),
   route("hot", "routes/hot.tsx"),
+  route("signals", "routes/signals.tsx"),
+  route("signals/topic/:topicKey", "routes/signal-topic.tsx"),
   route("demands", "routes/demands.tsx"),
   route("claims", "routes/claims.tsx"),
   route("story/:publicId", "routes/story.tsx"),

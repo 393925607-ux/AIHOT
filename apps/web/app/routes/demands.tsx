@@ -14,6 +14,8 @@ type Sample = {
   sourceUser: string | null;
   sourceKind: string;
   observedAt: string;
+  topicKey: string | null;
+  topicLabel: string | null;
 };
 type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; latestAt: string; samples: Sample[] };
 type DemandResponse = { themes: Theme[]; totalSamples: number; generatedAt: string };
@@ -54,7 +56,7 @@ export default function DemandsPage() {
             <div className="divide-y divide-line-soft">
               {theme.samples.map((sample) => (
                 <article key={sample.id} className="px-5 py-4 sm:px-6">
-                  <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-4"><span className="rounded bg-bg-sunk px-2 py-0.5">{sample.sourceName}</span><span>{sample.sourceUser ? `@${sample.sourceUser}` : "匿名用户"}</span><span>·</span><time dateTime={sample.observedAt}>{stamp(sample.observedAt)}</time></div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-4"><span className="rounded bg-bg-sunk px-2 py-0.5">{sample.sourceName}</span><span>{sample.sourceUser ? `@${sample.sourceUser}` : "匿名用户"}</span>{sample.topicKey && <Link to={`/signals/topic/${sample.topicKey}`} className="text-accent hover:text-accent-ink">#{sample.topicLabel ?? sample.topicKey}</Link>}<span>·</span><time dateTime={sample.observedAt}>{stamp(sample.observedAt)}</time></div>
                   <p className="mt-2 text-[14px] font-semibold leading-relaxed text-ink">{sample.problem}</p>
                   <dl className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-ink-3 sm:grid-cols-2"><div><dt className="inline font-medium text-ink-4">场景：</dt><dd className="inline">{sample.scenario}</dd></div><div><dt className="inline font-medium text-ink-4">绕行：</dt><dd className="inline">{sample.workaround || "未提到"}</dd></div></dl>
                   <blockquote className="mt-3 border-l-2 border-accent/40 pl-3 text-[12.5px] leading-relaxed text-ink-3">“{sample.evidence}”</blockquote>
