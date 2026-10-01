@@ -39,7 +39,8 @@ async function check(path: string, expect: (res: Response, body: string) => stri
       console.log(`– ${path}  no leaderboard round published yet`);
       return;
     }
-    const problem = res.status !== 200 ? `HTTP ${res.status}` : expect(res, body);
+    const allowedRedirect = path === "/more" && (res.status === 301 || res.status === 302) && !!res.headers.get("location");
+    const problem = allowedRedirect ? null : res.status !== 200 ? `HTTP ${res.status}` : expect(res, body);
     console.log(`${problem ? "✗" : "✓"} ${path}${problem ? `  ${problem}` : ""}`);
     if (problem) failed += 1;
   } catch (error) {

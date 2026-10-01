@@ -9,6 +9,10 @@ const TopicAssignment = z.object({ id: z.number(), topicKey: z.string().trim().m
 const TopicBatch = z.object({ items: z.array(TopicAssignment).optional(), assignments: z.array(TopicAssignment).optional() });
 const RelationItem = z.object({ candidateId: z.number().optional(), id: z.number().optional(), relation: z.enum(["supports", "conflicts", "related", "unrelated"]) });
 const RelationBatch = z.object({ items: z.array(RelationItem).optional(), results: z.array(RelationItem).optional() });
+const DemandZhItem = z.object({ id: z.number(), problemZh: z.string().trim().min(1).max(240), scenarioZh: z.string().trim().min(1).max(400), workaroundZh: z.string().trim().max(240).optional() });
+const DemandZhBatch = z.object({ items: z.array(DemandZhItem).optional(), translations: z.array(DemandZhItem).optional() });
+const ClaimZhItem = z.object({ id: z.number(), claimZh: z.string().trim().min(1).max(400).optional(), translation: z.string().trim().min(1).max(400).optional() });
+const ClaimZhBatch = z.object({ items: z.array(ClaimZhItem).optional(), translations: z.array(ClaimZhItem).optional() });
 const TOPIC_LABELS: Record<string, string> = {
   "mobile-coding-agent": "移动远程 Coding Agent", "context-memory": "上下文与记忆", "tool-integration": "工具与集成",
   "benchmark-evaluation": "Benchmark 与评测", "cost-pricing": "成本与价格", reliability: "稳定性",
@@ -39,9 +43,31 @@ async function assignTopics(table: "insight_demands" | "insight_claims", items: 
   }
 }
 
+async function translateDemands(items: Array<{ id: number; problem: string; scenario: string; workaround: string }>) {
+  const [{ missing }] = await sql<{ missing: number }[]>`SELECT count(*)::int AS missing FROM insight_demands WHERE problem_zh IS NULL`;
+  if (!missing) return;
+  for (let i = 0; i < items.length; i += 8) {
+    const batch = items.slice(i, i + 8);
+    const result = await ask("insight_demand_zh", `demand-zh:${batch[0]!.id}`, "把公开用户反馈翻译成自然、简洁、忠实的中文产品文案。只返回 JSON，顶层字段可用 items 或 translations。保留具体问题，不夸大，不补充原文没有的事实。字段：problemZh、scenarioZh、workaroundZh。", JSON.stringify(batch), DemandZhBatch);
+    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_demands SET problem_zh = ${item.problemZh}, scenario_zh = ${item.scenarioZh}, workaround_zh = ${item.workaroundZh ?? ""} WHERE id = ${item.id}`;
+  }
+}
+
+async function translateClaims(items: Array<{ id: number; claim: string }>) {
+  const [{ missing }] = await sql<{ missing: number }[]>`SELECT count(*)::int AS missing FROM insight_claims WHERE claim_zh IS NULL`;
+  if (!missing) return;
+  for (let i = 0; i < items.length; i += 10) {
+    const batch = items.slice(i, i + 10);
+    const result = await ask("insight_claim_zh", `claim-zh:${batch[0]!.id}`, "把公开 Claim 翻译成自然、忠实的中文。只返回 JSON，顶层字段可用 items 或 translations。必须保留 up to、at least、approximately、average、peak、may、can、preview、beta、internal benchmark、selected workloads、特定硬件/地区/套餐/测试条件等限定词，不要把主张翻译得更强。", JSON.stringify(batch), ClaimZhBatch);
+    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_claims SET claim_zh = ${item.claimZh ?? item.translation ?? item.id.toString()} WHERE id = ${item.id}`;
+  }
+}
+
 async function main() {
   const demands = await sql<{ id: number; problem: string; scenario: string; workaround: string }[]>`SELECT id, problem, scenario, workaround FROM insight_demands ORDER BY id`;
   const claims = await sql<{ id: number; claim: string; claimant: string; original_source: string; relation_reviewed: boolean }[]>`SELECT id, claim, claimant, original_source, relation_reviewed FROM insight_claims ORDER BY id`;
+  await translateDemands(demands);
+  await translateClaims(claims);
   await assignTopics("insight_demands", demands.map((x) => ({ id: x.id, text: `${x.problem}\n${x.scenario}\n${x.workaround}` })));
   await assignTopics("insight_claims", claims.map((x) => ({ id: x.id, text: `${x.claim}\n提出者：${x.claimant}` })));
 

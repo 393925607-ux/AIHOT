@@ -1,7 +1,7 @@
 import { SITE } from "@aihot/industry/site";
 import { FEATURES } from "@aihot/industry/features";
 import type { ReactNode } from "react";
-import { Link, useRouteLoaderData } from "react-router";
+import { Link, redirect, useRouteLoaderData } from "react-router";
 import type { loader as rootLoader } from "../root";
 import { useChangelogDot } from "../components/shell/Sidebar";
 import { pageMeta } from "../lib/seo";
@@ -15,6 +15,10 @@ export function headers() {
 
 export function meta() {
   return pageMeta({ title: "更多", path: "/more", noindex: true });
+}
+
+export async function loader() {
+  throw redirect("/");
 }
 
 type Row = { to: string; label: string; icon: ReactNode };

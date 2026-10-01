@@ -23,7 +23,7 @@ import { listReports, loadReport, reportNavigation, loadReportNavigation, loadRe
 import { loadSiteCodexResetPage, loadSiteCodexResetDay } from "@aihot/backend/publication/monitor";
 import { codexResetVersion } from "@aihot/backend/monitor/read";
 import { cached } from "@aihot/backend/lib/cache";
-import { loadClaims, loadDemandThemes, loadSignals, loadTopicDetail } from "@aihot/backend/publication/insights";
+import { loadClaim, loadClaims, loadDemandThemes, loadDemandTheme, loadSignals, loadTopicDetail } from "@aihot/backend/publication/insights";
 import { looseQuery, sendJsonWithEtag, sendProblem } from "../http/respond.ts";
 
 type Handler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -175,6 +175,21 @@ export function registerSite(app: FastifyInstance) {
     const q = looseQuery(req);
     const data = await loadClaims({ q: q.q ?? null, status: q.status ?? null, limit: Number(q.limit) || 100 });
     return sendJsonWithEtag(req, reply, data, { etagPrefix: "claims", cacheControl: "public, max-age=30, s-maxage=60" });
+  }));
+
+  app.get("/api/site/demands/:themeKey", siteHandler(async (req, reply) => {
+    const key = (req.params as { themeKey: string }).themeKey.trim().slice(0, 300);
+    const data = await loadDemandTheme(key);
+    if (!data) return sendProblem(req, reply, { status: 404, code: "not_found", detail: "demand not found", cacheControl: "public, max-age=60" });
+    return sendJsonWithEtag(req, reply, data, { etagPrefix: "demand-detail", cacheControl: "public, max-age=30, s-maxage=60" });
+  }));
+
+  app.get("/api/site/claims/:id", siteHandler(async (req, reply) => {
+    const id = Number((req.params as { id: string }).id);
+    if (!Number.isSafeInteger(id) || id < 1) return sendProblem(req, reply, { status: 404, code: "not_found", detail: "claim not found" });
+    const data = await loadClaim(id);
+    if (!data) return sendProblem(req, reply, { status: 404, code: "not_found", detail: "claim not found", cacheControl: "public, max-age=60" });
+    return sendJsonWithEtag(req, reply, data, { etagPrefix: "claim-detail", cacheControl: "public, max-age=30, s-maxage=60" });
   }));
 
   app.get("/api/site/signals", siteHandler(async (req, reply) => {

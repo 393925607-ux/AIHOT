@@ -16,8 +16,11 @@ type Sample = {
   observedAt: string;
   topicKey: string | null;
   topicLabel: string | null;
+  problemZh?: string | null;
+  scenarioZh?: string | null;
+  workaroundZh?: string | null;
 };
-type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; latestAt: string; samples: Sample[] };
+type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; latestAt: string; samples: Sample[] };
 type DemandResponse = { themes: Theme[]; totalSamples: number; generatedAt: string };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -41,30 +44,20 @@ export default function DemandsPage() {
   return (
     <div className="pb-10">
       <header className="pb-5 pt-5 lg:pt-1">
-        <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">REAL USER SIGNALS</p>
-        <h1 className="mt-1.5 text-[25px] font-bold tracking-[-0.01em] text-ink">真需求采样器</h1>
-        <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">从公开 Hacker News 评论和 GitHub Issues 抽取具体问题。主题按相似关键词轻量归并，保留每个独立用户与原始证据。</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-4"><span className="rounded-full bg-accent-softer px-2.5 py-1"><b className="num text-ink-2">{data.totalSamples}</b> 个样本</span><span className="rounded-full bg-bg-sunk px-2.5 py-1"><b className="num text-ink-2">{data.themes.length}</b> 个需求主题</span></div>
+        <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">REAL USER DEMANDS</p>
+        <h1 className="mt-1.5 text-[25px] font-bold tracking-[-0.01em] text-ink">真需求</h1>
+        <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">真实用户现在到底在为什么具体问题折腾？默认按独立用户数，再按最近活跃时间排序。</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-4"><span className="rounded-full bg-accent-softer px-2.5 py-1"><b className="num text-ink-2">{data.totalSamples}</b> 条原始样本</span><span className="rounded-full bg-bg-sunk px-2.5 py-1"><b className="num text-ink-2">{data.themes.length}</b> 个具体问题</span></div>
       </header>
       <div className="space-y-4">
         {data.themes.map((theme) => (
-          <section key={theme.themeKey} className="card overflow-hidden">
+          <Link to={`/demands/${theme.themeKey}`} key={theme.themeKey} className="card block overflow-hidden transition-colors hover:border-accent/40">
             <div className="border-b border-line-soft px-5 py-4 sm:px-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{theme.themeTitle}</h2><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.sampleCount}</b> 个样本 · <b className="num text-ink-2">{theme.sourceCount}</b> 个独立来源</span></div>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{theme.samples[0]?.problem}</p>
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{theme.themeTitle}</h2><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.sourceCount}</b> 个独立来源</span></div>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{theme.samples[0]?.problemZh ?? theme.samples[0]?.problem}</p>
             </div>
-            <div className="divide-y divide-line-soft">
-              {theme.samples.map((sample) => (
-                <article key={sample.id} className="px-5 py-4 sm:px-6">
-                  <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-4"><span className="rounded bg-bg-sunk px-2 py-0.5">{sample.sourceName}</span><span>{sample.sourceUser ? `@${sample.sourceUser}` : "匿名用户"}</span>{sample.topicKey && <Link to={`/signals/topic/${sample.topicKey}`} className="text-accent hover:text-accent-ink">#{sample.topicLabel ?? sample.topicKey}</Link>}<span>·</span><time dateTime={sample.observedAt}>{stamp(sample.observedAt)}</time></div>
-                  <p className="mt-2 text-[14px] font-semibold leading-relaxed text-ink">{sample.problem}</p>
-                  <dl className="mt-2 grid gap-1.5 text-[13px] leading-relaxed text-ink-3 sm:grid-cols-2"><div><dt className="inline font-medium text-ink-4">场景：</dt><dd className="inline">{sample.scenario}</dd></div><div><dt className="inline font-medium text-ink-4">绕行：</dt><dd className="inline">{sample.workaround || "未提到"}</dd></div></dl>
-                  <blockquote className="mt-3 border-l-2 border-accent/40 pl-3 text-[12.5px] leading-relaxed text-ink-3">“{sample.evidence}”</blockquote>
-                  <Link to={sample.originalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-[12px] font-medium text-accent hover:text-accent-ink">打开原始证据 ↗</Link>
-                </article>
-              ))}
-            </div>
-          </section>
+            <div className="flex items-center justify-between px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>最近活跃：{stamp(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
+          </Link>
         ))}
         {data.themes.length === 0 && <div className="card px-5 py-12 text-center text-[14px] text-ink-3">还没有需求样本。运行 `npm run insights:collect` 后刷新。</div>}
       </div>
