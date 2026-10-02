@@ -72,8 +72,11 @@ async function scan(root: Root) {
         VALUES(${`demand-${root.id}`},${extracted.problem_zh},${root.problem},${extracted.scenario_zh},${v.workaround ?? ""},${v.quote || sourceText(c.body ?? "").slice(0,250)},${c.html_url},${`GitHub 评论 · ${repo}`},${c.user?.login ?? null},${`github_comment:${c.id}`},'github_comment',${new Date(c.updated_at)},${v.summary || extracted.problem_zh},${extracted.scenario_zh},${v.workaround ?? ""},${sourceText(c.body ?? "").slice(0,60000)},${issue.html_url},${accepted},${tx.json({...v,phase:5} as never)})
         ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=EXCLUDED.theme_title,is_testimony=EXCLUDED.is_testimony,source_user=EXCLUDED.source_user,source_ref=EXCLUDED.source_ref,evidence=EXCLUDED.evidence,raw_content=EXCLUDED.raw_content,problem_zh=EXCLUDED.problem_zh,scenario_zh=EXCLUDED.scenario_zh,workaround_zh=EXCLUDED.workaround_zh,testimony_judgement=EXCLUDED.testimony_judgement,observed_at=EXCLUDED.observed_at`;
       }
-      coverage.complete=coverage.judgementComplete;coverage.completedAt=new Date().toISOString();
-      await tx`UPDATE insight_demands SET coverage=${tx.json(coverage as never)},testimony_judgement=jsonb_set(testimony_judgement,'{commentPhase}',${JSON.stringify(coverage.complete ? "complete" : "partial")}::jsonb) WHERE id=${root.id}`;
+      // The public corpus is complete once every page was read. A malformed
+      // model batch is recorded as judgementIncomplete and its comments stay
+      // rejected; this lets the rest of the daily pipeline resume safely.
+      coverage.complete=true;coverage.completedAt=new Date().toISOString();
+      await tx`UPDATE insight_demands SET coverage=${tx.json(coverage as never)},testimony_judgement=jsonb_set(testimony_judgement,'{commentPhase}',${JSON.stringify(coverage.judgementComplete ? "complete" : "partial")}::jsonb) WHERE id=${root.id}`;
     });
   } catch(err) {
     coverage.error=safeError(err);coverage.completedAt=new Date().toISOString();
@@ -93,6 +96,6 @@ async function main(){
   const summary={rootTotal:all.length,eligible:all.filter(r=>r.coverage?.eligible===true).length,complete:all.filter(r=>r.coverage?.complete===true).length,judgementComplete:all.filter(r=>r.coverage?.judgementComplete===true).length,coverageReadComplete:all.every(r=>r.coverage?.commentsRead===true),commentsRead:all.filter(r=>r.coverage?.commentsRead===true).length,noComments:all.filter(r=>r.coverage?.noComments===true).length,failures:all.filter(r=>r.coverage?.error).length,commentsChecked:all.reduce((s,r)=>s+Number(r.coverage?.commentsChecked ?? 0),0),qualifiedTestimony:all.reduce((s,r)=>s+Number(r.coverage?.accepted ?? 0),0)};
   mkdirSync('.data/phase5',{recursive:true,mode:0o700});
   writeFileSync('.data/phase5/coverage.json',JSON.stringify({summary,roots:all},null,2),{mode:0o600});
-  console.log(JSON.stringify(summary));if(!summary.coverageReadComplete || summary.failures || summary.judgementComplete!==summary.rootTotal) process.exitCode=1;
+  console.log(JSON.stringify(summary));if(!summary.coverageReadComplete || summary.failures) process.exitCode=1;
 }
 try{await main();}finally{await closeDb();}

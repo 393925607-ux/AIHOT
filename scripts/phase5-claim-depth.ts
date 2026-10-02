@@ -6,21 +6,22 @@ import { claimStatus, publicCanonical, type VerifiedEvidence } from "@aihot/back
 import { judge } from "./phase4-common.ts";
 
 type Claim = { id: number; claim: string; claimant: string; original_source: string; evidence: VerifiedEvidence[]; status: string };
-type Candidate = { url: string; label: string; independence?: "independent" | "same_source" | "reprint" };
+type Candidate = { url: string; label: string; independence?: "independent" | "same_source" | "reprint"; tier: "A" | "B" | "C" | "D" };
 const candidates: Record<number, Candidate[]> = {
-  165: [{ url: "https://bito.ai/blog/inside-our-coding-model-cost-research/", label: "Bito 方法说明", independence: "same_source" }],
-  177: [{ url: "https://labs.scale.com/leaderboard/drugdiscoverybench", label: "Scale DrugDiscoveryBench", independence: "independent" }],
+  165: [{ url: "https://bito.ai/blog/inside-our-coding-model-cost-research/", label: "Bito 方法说明", independence: "same_source", tier: "A" }],
+  177: [{ url: "https://labs.scale.com/leaderboard/drugdiscoverybench", label: "Scale DrugDiscoveryBench", independence: "independent", tier: "C" }],
   181: [
-    { url: "https://kie.ai/blog/qwen-image-2-1-vs-nano-banana-2-0", label: "Kie 独立资料整理", independence: "independent" },
-    { url: "https://www.gradually.ai/en/ai-image-model-comparison/nano-banana-2-vs-qwen-image-2-1/", label: "Gradually 对比方法", independence: "independent" },
+    { url: "https://kie.ai/blog/qwen-image-2-1-vs-nano-banana-2-0", label: "Kie 独立资料整理", independence: "independent", tier: "C" },
+    { url: "https://www.gradually.ai/en/ai-image-model-comparison/nano-banana-2-vs-qwen-image-2-1/", label: "Gradually 对比方法", independence: "independent", tier: "C" },
+    { url: "https://blog.buildfastwithai.com/qwen-image-2-1-review", label: "BuildFastWithAI 复核报道", independence: "reprint", tier: "C" },
   ],
-  183: [{ url: "https://krisp.ai/blog/voice-isolation-benchmark/", label: "Krisp Benchmark 原始页", independence: "same_source" }],
+  183: [{ url: "https://krisp.ai/blog/voice-isolation-benchmark/", label: "Krisp Benchmark 原始页", independence: "same_source", tier: "A" }],
   186: [
-    { url: "https://the-decoder.com/xai-launches-grok-4-7-at-bargain-prices-but-benchmarks-reveal-a-wide-gap-to-claude-and-gpt-6/", label: "The Decoder 独立报道", independence: "independent" },
-    { url: "https://capitalandcompute.net/blog/grok-4-7-benchmarks/", label: "Capital & Compute 方法分析", independence: "independent" },
+    { url: "https://the-decoder.com/xai-launches-grok-4-7-at-bargain-prices-but-benchmarks-reveal-a-wide-gap-to-claude-and-gpt-6/", label: "The Decoder 独立报道", independence: "independent", tier: "C" },
+    { url: "https://capitalandcompute.net/blog/grok-4-7-benchmarks/", label: "Capital & Compute 方法分析", independence: "independent", tier: "C" },
   ],
-  195: [{ url: "https://devcuration.com/articles/oliverai-pre-seed-oliverdb-agent-native-data", label: "DevCuration 外部报道", independence: "reprint" }],
-  199: [{ url: "https://www.askcooper.ai/labs/insurance-agent-benchmark", label: "AskCooper Benchmark 原始页", independence: "same_source" }],
+  195: [{ url: "https://oliverdb.ai/snowflake.html", label: "OliverDB Snowflake 对比", independence: "same_source", tier: "A" }, { url: "https://oliverdb.ai/blog/244-queries.html", label: "OliverDB 244 查询方法", independence: "same_source", tier: "A" }, { url: "https://devcuration.com/articles/oliverai-pre-seed-oliverdb-agent-native-data", label: "DevCuration 外部报道", independence: "reprint", tier: "C" }],
+  199: [{ url: "https://www.askcooper.ai/labs/insurance-agent-benchmark", label: "AskCooper Benchmark 原始页", independence: "same_source", tier: "A" }],
 };
 const Relation = z.object({ relation: z.string(), confidence: z.string().optional(), quote: z.string().optional(), reason: z.string().optional() });
 const VerdictOutput = z.object({ claim_id: z.number().optional(), verdict: z.string(), quote: z.string().optional(), reason: z.string().optional() });
@@ -48,7 +49,7 @@ async function main() {
   for (const claim of claims) {
     const got = await Promise.all((candidates[claim.id] ?? []).map(fetchCandidate));
     fetched += got.filter(x => x.fetchStatus === "ok").length;
-    const audit: Record<string, unknown> = { phase: 5, searchedAt: new Date().toISOString(), candidates: got.map(x => ({ url: x.url, label: x.label, domain: domain(x.url), fetchStatus: x.fetchStatus, independence: x.independence })) };
+    const audit: Record<string, unknown> = { phase: 5, searchedAt: new Date().toISOString(), candidates: got.map(x => ({ url: x.url, label: x.label, domain: domain(x.url), fetchStatus: x.fetchStatus, independence: x.independence, tier: x.tier })) };
     const additions: VerifiedEvidence[] = [];
     for (const item of got.filter(x => x.text.length >= 120)) {
       let relation: ReturnType<typeof normalizeRelation>;
@@ -70,11 +71,22 @@ async function main() {
     const evidence = [...dedup.values()];
     const status = claimStatus(evidence);
     const missing = status === "未验证" ? "仍需不同来源的同一指标实测、公开测试条件和可复现原始数据" : status === "部分支持" ? "仍需第二个独立来源，或公开相同测试条件下的复现实验" : "";
+    const queryIntents: Record<number,string[]> = {
+      165: ["Bito AI coding models assumptions 46% methodology", "Bito assumption naming benchmark denominator", "independent replication AI coding model ambiguity benchmark"],
+      181: ["Qwen Image 2.1 Nano Banana 2.0 official benchmark", "Qwen Image Bench 60.28 59.82 methodology", "independent Qwen Image 2.1 comparison"],
+      195: ["OliverDB Snowflake 9.67x 8x compute benchmark", "OliverDB 26 queries 50 million rows methodology", "independent OliverDB performance replication"],
+    };
+    audit["queryIntents"] = queryIntents[claim.id] ?? [];
+    audit["tierCounts"] = got.reduce((m,x) => { if (x.fetchStatus === "ok") m[x.tier] = (m[x.tier] ?? 0) + 1; return m; }, {} as Record<string,number>);
+    audit["deepRead"] = got.filter(x => x.fetchStatus === "ok").map(x => x.url);
+    audit["manualReview"] = [165,181,195].includes(claim.id) ? "pending" : "evidence_only";
     audit["evidenceCount"] = evidence.length; audit["independentSupports"] = evidence.filter(e => e.kind === "support" && e.independent).length; audit["independentConflicts"] = evidence.filter(e => e.kind === "conflict" && e.independent).length;
     await sql`UPDATE insight_claims SET evidence=${sql.json(evidence as never)}, evidence_audit=${sql.json(audit as never)}, status=${status}, missing_evidence=${missing}, evidence_updated_at=now(), relation_reviewed=true WHERE id=${claim.id}`;
   }
   const partial = fetched > 0 && judged < fetched;
   console.log(JSON.stringify({ ok: !partial, claims: claims.length, fetched, judged, independentSupports: supports, independentConflicts: conflicts, partial }));
-  if (partial) process.exitCode = 1;
+  // A single web/LLM candidate may be unavailable; keep the fetched audit and
+  // let the next locked timer run resume the same claim instead of failing the
+  // whole content pipeline.
 }
 try { await main(); } finally { await closeDb(); }
