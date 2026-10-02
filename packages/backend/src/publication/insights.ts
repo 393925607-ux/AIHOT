@@ -1,12 +1,13 @@
 import { sql } from "../db.ts";
+import { demandBreadth } from "../insights/breadth.ts";
 
 export type DemandSample = {
   id: number; problem: string; scenario: string; workaround: string; evidence: string;
-  originalUrl: string; sourceName: string; sourceUser: string | null; sourceKind: string;
+  sourceRef?: string | null; originalUrl: string; sourceName: string; sourceUser: string | null; sourceKind: string;
   observedAt: string; topicKey: string | null; topicLabel: string | null;
   problemZh?: string | null; scenarioZh?: string | null; workaroundZh?: string | null;
 };
-export type DemandTheme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; latestAt: string; samples: DemandSample[] };
+export type DemandTheme = ReturnType<typeof demandBreadth> & { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; latestAt: string; samples: DemandSample[] };
 export type ClaimEvidence = { kind: "support" | "conflict" | "related"; url: string; quote: string; source: string };
 export type Claim = {
   id: number; claim: string; claimant: string; claimType: "性能" | "成本" | "用户量" | "Benchmark" | "产品能力";
@@ -19,29 +20,36 @@ export type Signal = {
   title: string; detail: string; sourceUrl: string; actor: string; status: string | null; observedAt: string;
 };
 
-type DemandRow = { theme_key: string; theme_title: string; sample_count: number; source_count: number; independent_user_count: number; latest_at: Date; samples: DemandSample[] };
+type DemandRow = { theme_key: string; theme_title: string; latest_at: Date; samples: DemandSample[] };
 type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claim_type: Claim["claimType"]; original_source: string; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; topic_key: string | null; topic_label: string | null };
+
+async function readDemandThemes(q: string | null, limit: number, themeKey: string | null = null): Promise<DemandTheme[]> {
+  const rows = await sql<DemandRow[]>`
+    SELECT d.theme_key, max(d.theme_title) AS theme_title, max(d.observed_at) AS latest_at,
+      json_agg(json_build_object('id', d.id, 'problem', d.problem, 'scenario', d.scenario, 'workaround', d.workaround,
+        'problemZh', d.problem_zh, 'scenarioZh', d.scenario_zh, 'workaroundZh', d.workaround_zh,
+        'evidence', d.evidence, 'originalUrl', d.original_url, 'sourceRef', d.source_ref,
+        'sourceName', d.source_name, 'sourceUser', d.source_user, 'sourceKind', d.source_kind,
+        'observedAt', d.observed_at, 'topicKey', d.topic_key, 'topicLabel', d.topic_label)
+        ORDER BY d.observed_at DESC, d.id) AS samples
+    FROM insight_demands d
+    WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
+      AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})
+    GROUP BY d.theme_key
+    HAVING (${themeKey}::text IS NULL OR d.theme_key = ${themeKey})`;
+  return rows.map(r => {
+    const breadth = demandBreadth(r.samples);
+    return { themeKey: r.theme_key, themeTitle: r.theme_title, sampleCount: r.samples.length,
+      sourceCount: breadth.independentThreadCount, ...breadth, latestAt: r.latest_at.toISOString(), samples: r.samples };
+  }).sort((a,b) => b.independentUserCount - a.independentUserCount || Date.parse(b.latestAt) - Date.parse(a.latestAt) || a.themeKey.localeCompare(b.themeKey)).slice(0, limit);
+}
 
 export async function loadDemandThemes(opts: { q?: string | null; limit?: number } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; generatedAt: string }> {
   const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 100)}%` : null;
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
-  const rows = await sql<DemandRow[]>`
-    SELECT lower(regexp_replace(d.problem, '[^[:alnum:][:alnum:]一-龥]+', '-', 'g')) AS theme_key,
-           max(coalesce(d.problem_zh, d.problem)) AS theme_title, count(*)::int AS sample_count,
-           count(DISTINCT d.source_kind || ':' || coalesce(nullif(d.source_user, ''), d.source_item_id))::int AS source_count,
-           count(DISTINCT d.source_kind || ':' || coalesce(nullif(d.source_user, ''), '')) FILTER (WHERE nullif(d.source_user, '') IS NOT NULL)::int AS independent_user_count,
-           max(d.observed_at) AS latest_at,
-           json_agg(json_build_object('id', d.id, 'problem', d.problem, 'scenario', d.scenario, 'workaround', d.workaround,
-             'problemZh', d.problem_zh, 'scenarioZh', d.scenario_zh, 'workaroundZh', d.workaround_zh,
-             'evidence', d.evidence, 'originalUrl', d.original_url, 'sourceName', d.source_name, 'sourceUser', d.source_user,
-             'sourceKind', d.source_kind, 'observedAt', d.observed_at, 'topicKey', d.topic_key, 'topicLabel', d.topic_label)
-             ORDER BY d.observed_at DESC) AS samples
-    FROM insight_demands d
-    WHERE d.is_testimony AND d.source_kind <> 'hn_comment' AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})
-    GROUP BY lower(regexp_replace(d.problem, '[^[:alnum:][:alnum:]一-龥]+', '-', 'g'))
-    ORDER BY count(DISTINCT d.source_kind || ':' || coalesce(nullif(d.source_user, ''), '')) FILTER (WHERE nullif(d.source_user, '') IS NOT NULL) DESC, max(d.observed_at) DESC LIMIT ${limit}`;
-  const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment' AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})`;
-  return { themes: rows.map((r) => ({ themeKey: r.theme_key, themeTitle: r.theme_title, sampleCount: r.sample_count, sourceCount: r.source_count, independentUserCount: r.independent_user_count, latestAt: r.latest_at.toISOString(), samples: r.samples })), totalSamples: total, generatedAt: new Date().toISOString() };
+  const themes = await readDemandThemes(q, Math.min(Math.max(opts.limit ?? 50, 1), 100));
+  const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
+    AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})`;
+  return { themes, totalSamples: total, generatedAt: new Date().toISOString() };
 }
 
 export async function loadClaims(opts: { q?: string | null; status?: string | null; limit?: number } = {}): Promise<{ claims: Claim[]; total: number; generatedAt: string }> {
@@ -97,20 +105,5 @@ export async function loadTopicDetail(topicKey: string): Promise<{ topic: { key:
 }
 
 export async function loadDemandTheme(themeKey: string): Promise<DemandTheme | null> {
-  const [row] = await sql<DemandRow[]>`
-    SELECT lower(regexp_replace(d.problem, '[^[:alnum:][:alnum:]一-龥]+', '-', 'g')) AS theme_key,
-           max(coalesce(d.problem_zh, d.problem)) AS theme_title, count(*)::int AS sample_count,
-           count(DISTINCT d.source_kind || ':' || coalesce(nullif(d.source_user, ''), d.source_item_id))::int AS source_count,
-           count(DISTINCT d.source_kind || ':' || coalesce(nullif(d.source_user, ''), '')) FILTER (WHERE nullif(d.source_user, '') IS NOT NULL)::int AS independent_user_count,
-           max(d.observed_at) AS latest_at,
-           json_agg(json_build_object('id', d.id, 'problem', d.problem, 'scenario', d.scenario, 'workaround', d.workaround,
-             'problemZh', d.problem_zh, 'scenarioZh', d.scenario_zh, 'workaroundZh', d.workaround_zh,
-             'evidence', d.evidence, 'originalUrl', d.original_url, 'sourceName', d.source_name, 'sourceUser', d.source_user,
-             'sourceKind', d.source_kind, 'observedAt', d.observed_at, 'topicKey', d.topic_key, 'topicLabel', d.topic_label)
-             ORDER BY d.observed_at DESC) AS samples
-    FROM insight_demands d
-    WHERE d.is_testimony
-    GROUP BY lower(regexp_replace(d.problem, '[^[:alnum:][:alnum:]一-龥]+', '-', 'g'))
-    HAVING lower(regexp_replace(d.problem, '[^[:alnum:][:alnum:]一-龥]+', '-', 'g')) = ${themeKey}`;
-  return row ? { themeKey: row.theme_key, themeTitle: row.theme_title, sampleCount: row.sample_count, sourceCount: row.source_count, independentUserCount: row.independent_user_count, latestAt: row.latest_at.toISOString(), samples: row.samples } : null;
+  return (await readDemandThemes(null, 1, themeKey))[0] ?? null;
 }

@@ -26,10 +26,10 @@ export async function judge<S extends z.ZodType>(purpose: string, subject: strin
   await markReceiptsCompleted([result.receiptId]);
   return { data: result.data, receiptId: result.receiptId };
 }
-export async function github<T>(endpoint: string): Promise<T> {
+export async function github<T>(endpoint: string, opts: { refresh?: boolean } = {}): Promise<T> {
   if (!/^(repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(issues\/\d+(\/comments)?|readme)(\?.*)?|search\/issues\?.*)$/.test(endpoint)) throw new Error("Unsupported read-only GitHub route");
   const file = `.data/phase4/gh-${sha256(endpoint)}.json`;
-  if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as T;
+  if (!opts.refresh && existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as T;
   const out = await exec("gh", ["api", endpoint], { timeout: 30_000, maxBuffer: 6 * 1024 * 1024 });
   const parsed = JSON.parse(out.stdout) as T;
   writeFileSync(file, JSON.stringify(parsed), { mode: 0o600 });

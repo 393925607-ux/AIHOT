@@ -20,7 +20,7 @@ type Sample = {
   scenarioZh?: string | null;
   workaroundZh?: string | null;
 };
-type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; latestAt: string; samples: Sample[] };
+type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; independentThreadCount: number; independentRepoCount: number; independentPlatformCount: number; demandState: "multi_user" | "single_signal"; latestAt: string; samples: Sample[] };
 type DemandResponse = { themes: Theme[]; totalSamples: number; generatedAt: string };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -53,10 +53,10 @@ export default function DemandsPage() {
         {data.themes.map((theme) => (
           <Link to={`/demands/${theme.themeKey}`} key={theme.themeKey} className="card block overflow-hidden transition-colors hover:border-accent/40">
             <div className="border-b border-line-soft px-5 py-4 sm:px-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{theme.themeTitle}</h2><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.sourceCount}</b> 个独立来源</span></div>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{theme.samples[0]?.problemZh ?? theme.samples[0]?.problem}</p>
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{theme.themeTitle}</h2><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程</span></div>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{theme.themeTitle}</p>
             </div>
-            <div className="flex items-center justify-between px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>最近活跃：{stamp(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>{theme.demandState === "multi_user" ? "多人佐证" : "单点信号"} · {theme.independentRepoCount} 个仓库 · {theme.independentPlatformCount} 个平台 · 最近活跃：{stamp(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
           </Link>
         ))}
         {data.themes.length === 0 && <div className="card px-5 py-12 text-center text-[14px] text-ink-3">还没有需求样本。运行 `npm run insights:collect` 后刷新。</div>}
