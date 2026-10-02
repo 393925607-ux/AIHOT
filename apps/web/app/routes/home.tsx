@@ -38,7 +38,7 @@ export default function Home() {
   const groups = buildDateGroups([...data.signals].sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt) || b.id - a.id), (signal) => signal.observedAt);
   return <div className="pb-10">
     <header className="pb-5 pt-5 lg:pt-1">
-      <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">人工智能现实雷达</p>
+      <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">每日观察</p>
       <h1 className="mt-1.5 text-[26px] font-bold tracking-[-0.02em] text-ink">人工智能现实雷达</h1>
       <p className="mt-2 max-w-xl text-[14px] leading-[1.75] text-ink-3">看真实需求，也核查人工智能圈的夸张说法。</p>
       <nav className="mt-4 flex gap-2" aria-label="内容筛选">{tabs.map((tab) => <Link key={tab.key} to={tab.key ? `/?type=${tab.key}` : "/"} className={`rounded-full px-3 py-1.5 text-[12.5px] ${type === (tab.key || null) ? "bg-accent text-white" : "bg-bg-sunk text-ink-3 hover:text-ink"}`}>{tab.label}</Link>)}</nav>
