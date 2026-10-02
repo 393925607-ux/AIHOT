@@ -65,9 +65,9 @@ try:
         from urllib.parse import quote
         env['DATABASE_URL'] = 'postgres://{}:{}@127.0.0.1:55432/{}'.format(quote(db['POSTGRES_USER']), quote(db['POSTGRES_PASSWORD']), quote(db['POSTGRES_DB']))
     mode = sys.argv[1] if len(sys.argv) > 1 else 'reprocess'
-    commands = {'smoke': 'scripts/insights-model-smoke.ts', 'reprocess': 'scripts/reprocess-insights.ts', 'collect': 'scripts/collect-insights.ts'}
+    commands = {'smoke': 'scripts/insights-model-smoke.ts', 'reprocess': 'scripts/reprocess-insights.ts', 'collect': 'scripts/collect-insights.ts', 'testimony': 'scripts/collect-github-testimony.ts', 'claim-validity': 'scripts/phase4-claim-validity.ts'}
     if mode not in commands:
-        raise RuntimeError('Use smoke, reprocess, or collect')
+        raise RuntimeError('Use smoke, reprocess, collect, testimony, or claim-validity')
     os.chdir(root)
     os.execvpe('node', ['node', commands[mode], *sys.argv[2:]], env)
 except Exception as error:

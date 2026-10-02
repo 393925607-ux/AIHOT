@@ -9,7 +9,7 @@ const TopicAssignment = z.object({ id: z.number(), topicKey: z.string().trim().m
 const TopicBatch = z.object({ items: z.array(TopicAssignment).optional(), assignments: z.array(TopicAssignment).optional() });
 const RelationItem = z.object({ candidateId: z.number().optional(), id: z.number().optional(), relation: z.enum(["supports", "conflicts", "related", "unrelated"]) });
 const RelationBatch = z.object({ items: z.array(RelationItem).optional(), results: z.array(RelationItem).optional() });
-const DemandZhItem = z.object({ id: z.number(), problemZh: z.string().trim().min(1).max(240), scenarioZh: z.string().trim().min(1).max(400), workaroundZh: z.string().trim().max(240).optional() });
+const DemandZhItem = z.object({ id: z.number(), problemZh: z.string().trim().min(1).max(240), scenarioZh: z.string().trim().max(400).optional(), workaroundZh: z.string().trim().max(240).optional() });
 const DemandZhBatch = z.object({ items: z.array(DemandZhItem).optional(), translations: z.array(DemandZhItem).optional() });
 const ClaimZhItem = z.object({ id: z.number(), claimZh: z.string().trim().min(1).max(400).optional(), translation: z.string().trim().min(1).max(400).optional() });
 const ClaimZhBatch = z.object({ items: z.array(ClaimZhItem).optional(), translations: z.array(ClaimZhItem).optional() });
@@ -49,7 +49,7 @@ async function translateDemands(items: Array<{ id: number; problem: string; scen
   for (let i = 0; i < items.length; i += 8) {
     const batch = items.slice(i, i + 8);
     const result = await ask("insight_demand_zh", `demand-zh:${batch[0]!.id}`, "把公开用户反馈翻译成自然、简洁、忠实的中文产品文案。只返回 JSON，顶层字段可用 items 或 translations。保留具体问题，不夸大，不补充原文没有的事实。字段：problemZh、scenarioZh、workaroundZh。", JSON.stringify(batch), DemandZhBatch);
-    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_demands SET problem_zh = ${item.problemZh}, scenario_zh = ${item.scenarioZh}, workaround_zh = ${item.workaroundZh ?? ""} WHERE id = ${item.id}`;
+    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_demands SET problem_zh = ${item.problemZh}, scenario_zh = ${item.scenarioZh || "原文未明确说明具体使用场景"}, workaround_zh = ${item.workaroundZh ?? ""} WHERE id = ${item.id}`;
   }
 }
 
