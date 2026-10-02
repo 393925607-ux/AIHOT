@@ -77,7 +77,7 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const demands = type === "claim" ? [] : await sql<Signal[]>`
     SELECT 'demand' AS kind, d.id, d.topic_key AS "topicKey", d.topic_label AS "topicLabel", coalesce(d.problem_zh, d.problem) AS title,
-           CASE WHEN coalesce(d.scenario_zh, d.scenario) ~ '问题是什么|日常编码或自动化任务|未说明具体复现' THEN '原文未明确说明具体使用场景' ELSE coalesce(d.scenario_zh, d.scenario) END || CASE WHEN coalesce(d.workaround_zh, d.workaround) <> '' THEN '；临时办法：' || coalesce(d.workaround_zh, d.workaround) ELSE '' END AS detail,
+           nullif(CASE WHEN coalesce(d.scenario_zh, d.scenario) ~ '问题是什么|日常编码或自动化任务|未说明具体复现' THEN '' ELSE coalesce(d.scenario_zh, d.scenario) END || CASE WHEN coalesce(d.workaround_zh, d.workaround) <> '' AND coalesce(d.workaround_zh, d.workaround) !~ '暂未发现明确临时解决办法|原文未明确' THEN '；临时办法：' || coalesce(d.workaround_zh, d.workaround) ELSE '' END, '') AS detail,
            d.original_url AS "sourceUrl", coalesce(d.source_user, d.source_name) AS actor, NULL::text AS status, d.observed_at AS "observedAt"
     FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment' AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q}) AND (${topic}::text IS NULL OR d.topic_key = ${topic})
     ORDER BY d.observed_at DESC, d.id DESC LIMIT ${limit}`;

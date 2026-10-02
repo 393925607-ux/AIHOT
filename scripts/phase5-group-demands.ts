@@ -65,7 +65,7 @@ async function main() {
       const anchor=group[0]!;
       for (const r of group) {
         const reviews=[...decisions].filter(([k])=>k.split(':').includes(String(r.id))).map(([pair,v])=>({pair,...v}));
-        await tx`UPDATE insight_demands SET theme_key=${`demand-theme-${anchor.id}`},theme_title=${anchor.problem_zh || anchor.problem},grouping_judgement=${tx.json({phase:5,groupAnchor:anchor.id,groupSize:group.length,reviews} as never)} WHERE (source_kind='github_issue' AND id=${r.id}) OR (source_kind='github_comment' AND source_ref=${r.original_url})`;
+        await tx`UPDATE insight_demands SET theme_key=${`demand-theme-${anchor.id}`},theme_title=${anchor.problem_zh || anchor.problem},grouping_judgement=${tx.json({phase:5,groupAnchor:anchor.id,groupSize:group.length,reviews} as never)} WHERE coalesce(grouping_judgement->>'manualOverride','') <> 'keep_single_signal' AND ((source_kind='github_issue' AND id=${r.id}) OR (source_kind='github_comment' AND source_ref=${r.original_url}))`;
       }
     }
   });

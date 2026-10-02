@@ -32,7 +32,7 @@ function demandTitle(theme: Theme) {
     const summary = publicText(sample.problemZh, "");
     if (summary) return summary;
   }
-  return "暂未生成中文摘要，请查看原文。";
+  return "";
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -50,7 +50,8 @@ export function headers() {
 export default function DemandsPage() {
   const data = useLoaderData<typeof loader>();
   const compareLatest = compareLatestDesc<Theme>((theme) => theme.latestAt);
-  const grouped = buildDateGroups(data.themes, (theme) => theme.latestAt, new Date(), (a, b) => compareLatest(a, b) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey));
+  const visibleThemes = data.themes.filter((theme) => demandTitle(theme));
+  const grouped = buildDateGroups(visibleThemes, (theme) => theme.latestAt, new Date(), (a, b) => compareLatest(a, b) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey));
   return (
     <div className="pb-10">
       <header className="pb-5 pt-5 lg:pt-1">

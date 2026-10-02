@@ -113,7 +113,8 @@ async function main() {
     // kept; unknown/new rows remain hidden until a model judgement exists.
     const confidence = (model?.confidence ?? "").toLowerCase();
     const modelAccepted = model?.eligible === true && model.atomic !== false && !confidence.includes("low") && !confidence.includes("低");
-    const accepted = policy?.eligible === true ? (!model || (model.atomic !== false && !confidence.includes("low") && !confidence.includes("低"))) : false;
+    const modelFailure = modelErrors.some((error) => error.id === claim.id);
+    const accepted = policy?.eligible === true ? (modelFailure || !model ? true : modelAccepted) : false;
     const claimantName = policy?.claimantName ?? model?.claimantName ?? null;
     const claimantType = policy?.claimantType ?? model?.claimantType ?? null;
     const claimantInterest = policy?.claimantInterest ?? model?.claimantInterest ?? null;

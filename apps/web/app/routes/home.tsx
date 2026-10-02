@@ -19,14 +19,17 @@ export function meta() { return pageMeta({ title: "人工智能现实雷达", de
 export function headers() { return { "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=120" }; }
 
 function SignalCard({ signal }: { signal: Signal }) {
+  const title = publicText(signal.title, "");
+  if (!title) return null;
+  const detail = publicText(signal.detail, "");
   return <article className="card px-5 py-4 sm:px-6">
     <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-4">
       <span className={`rounded px-2 py-0.5 ${signal.kind === "demand" ? "bg-accent-softer text-accent" : "bg-hot-soft text-hot"}`}>{signal.kind === "demand" ? "真需求" : "牛皮账本"}</span>
       {signal.status && <span className="rounded bg-bg-sunk px-2 py-0.5">{signal.status}</span>}
       <time className="ml-auto" dateTime={signal.observedAt}>{formatShanghaiTime(signal.observedAt)}</time>
     </div>
-    <h2 className="mt-2 text-[17px] font-semibold leading-relaxed text-ink">{publicText(signal.title, "已收录一条公开材料")}</h2>
-    <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-3">{signal.kind === "demand" ? publicText(signal.detail, "已收录真实用户反馈。") : publicText(signal.detail, "提出方公开发布了这项主张。")}</p>
+    <h2 className="mt-2 text-[17px] font-semibold leading-relaxed text-ink">{title}</h2>
+    {detail && <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-3">{detail}</p>}
     <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-4"><span>{signal.kind === "demand" ? "真实用户反馈" : "公开主张"}</span><span>·</span><a href={signal.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:text-accent-ink">查看原文 ↗</a></div>
   </article>;
 }

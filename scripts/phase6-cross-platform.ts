@@ -64,7 +64,11 @@ async function main() {
     }
     await sql`INSERT INTO insight_demands(theme_key,theme_title,problem,scenario,workaround,evidence,original_url,source_name,source_user,source_item_id,source_kind,observed_at,problem_zh,scenario_zh,workaround_zh,raw_content,source_ref,is_testimony,testimony_judgement)
       VALUES(${themeKey},${themeTitle},${problem},${scenario},${workaround},${quote},${originalUrl},${hit.sourceKind === 'openai_community' ? 'OpenAI Community' : 'Hacker News 评论'},${hit.author ?? ""},${itemId},${hit.sourceKind},${new Date(hit.created_at)},${problem},${scenario},${workaround},${hit.comment_text},${originalUrl},true,${sql.json({ ...verdict, phase: 6, storyTitle: hit.story_title, parentId: hit.parent_id, sourceKind: hit.sourceKind } as never)})
-      ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=EXCLUDED.theme_title,problem_zh=EXCLUDED.problem_zh,scenario_zh=EXCLUDED.scenario_zh,workaround_zh=EXCLUDED.workaround_zh,evidence=EXCLUDED.evidence,raw_content=EXCLUDED.raw_content,source_user=EXCLUDED.source_user,observed_at=EXCLUDED.observed_at,is_testimony=true,testimony_judgement=EXCLUDED.testimony_judgement`;
+      ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=EXCLUDED.theme_title,
+        problem_zh=CASE WHEN coalesce(insight_demands.problem_zh,'')<>'' THEN insight_demands.problem_zh ELSE EXCLUDED.problem_zh END,
+        scenario_zh=CASE WHEN coalesce(insight_demands.scenario_zh,'')<>'' THEN insight_demands.scenario_zh ELSE EXCLUDED.scenario_zh END,
+        workaround_zh=CASE WHEN coalesce(insight_demands.workaround_zh,'')<>'' THEN insight_demands.workaround_zh ELSE EXCLUDED.workaround_zh END,
+        evidence=EXCLUDED.evidence,raw_content=EXCLUDED.raw_content,source_user=EXCLUDED.source_user,observed_at=EXCLUDED.observed_at,is_testimony=true,testimony_judgement=EXCLUDED.testimony_judgement`;
     accepted++;
   }
   const partial = hits.length > 0 && judged < hits.length;

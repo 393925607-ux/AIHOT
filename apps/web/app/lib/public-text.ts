@@ -21,6 +21,29 @@ const PREFIX_TRANSLATIONS: Array<[string, string]> = [
   ["Codex frequently cannot read files in cloud projects", "编程助手经常无法读取云端项目文件"],
 ];
 
+const ALLOWED_TERMS = new Set(
+  "Windows Computer Use Claude Code Codex ChatGPT Chrome MCP GitHub OpenAI Gemini Qwen Snowflake Hacker News Agent Browser Remote Desktop Android iOS macOS Linux CLI API URL HTTP RPC GPU GB MB OOM Xcode PowerShell Benchmark SOTA GPT SWE Pro Fable Cowork MSIX WebView2 Electron Chromium Apple Safari Finder WSL AWS HTTPS_PROXY Bedrock SSO DNS sky getApp listApps Trusted Darwin App Sol Ultra"
+    .split(" "),
+);
+
+const TECHNICAL_PHRASES: Array<[string, string]> = [
+  ["A saved user permission setting blocks this action", "已保存的浏览器权限设置阻止了此操作"],
+  ["saved browser permissions could not be verified", "已保存的浏览器权限无法验证"],
+  ["Trusted RPC service is not configured: sky", "可信 RPC 服务未配置：sky"],
+  ["Missing HCS services: vfpext", "缺少 HCS 服务：vfpext"],
+  ["Steered conversation", "转向中的对话"],
+];
+
+function normalizeTechnicalPhrases(value: string): string {
+  return TECHNICAL_PHRASES.reduce((text, [source, target]) => text.replaceAll(source, target), value);
+}
+
+function isReaderFacingChinese(value: string): boolean {
+  if (!/[\u3400-\u9fff]/.test(value)) return false;
+  const words = value.match(/[A-Za-z][A-Za-z0-9_.@/-]*/g) ?? [];
+  return words.every((word) => ALLOWED_TERMS.has(word) || /^\d/.test(word));
+}
+
 export function publicText(value: string | null | undefined, fallback: string): string {
   const text = value?.trim();
   if (!text) return fallback;
@@ -28,15 +51,15 @@ export function publicText(value: string | null | undefined, fallback: string): 
   if (exact) return exact;
   const prefix = PREFIX_TRANSLATIONS.find(([source]) => text.startsWith(source));
   if (prefix) return prefix[1];
-  if (/[A-Za-z]/.test(text)) return fallback;
-  return text;
+  const normalized = normalizeTechnicalPhrases(text);
+  return isReaderFacingChinese(normalized) ? normalized : fallback;
 }
 
 export function displaySource(value: string | null | undefined): string {
   const text = value?.toLowerCase() ?? "";
-  if (text.includes("github")) return "代码托管平台";
-  if (text.includes("hacker") || text === "hn") return "技术社区";
-  if (text.includes("openai")) return "开发者社区";
+  if (text.includes("github")) return "GitHub";
+  if (text.includes("hacker") || text === "hn") return "Hacker News";
+  if (text.includes("openai")) return "OpenAI 社区";
   if (text.includes("reddit")) return "讨论社区";
   return "公开来源";
 }
