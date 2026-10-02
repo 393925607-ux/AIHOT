@@ -38,7 +38,8 @@ export const SITE = {
     founder: null as null | { name: string; url?: string; description?: string },
   },
   /** 抓取信源时报上的名字（User-Agent 里用），不要冒用别的站。 */
-  crawlerName: "现实雷达采集器",
+  // HTTP User-Agent must remain ASCII; this is an internal crawler identifier, not UI copy.
+  crawlerName: "RealityRadarBot",
 } as const;
 
 /** 关于页的文案。数字（信源数、收录数、精选数、日报期数）来自站内实时统计，不用写在这里。 */

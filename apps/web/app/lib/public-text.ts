@@ -1,121 +1,48 @@
-const KNOWN_TRANSLATIONS: Array<[RegExp, string]> = [
-  [/^No Text-to-Speech Option Available in Codex Mobile/i, "编程助手移动版缺少文字转语音功能"],
-  [/^Codex IDE plugin silently eats messages/i, "编程助手集成插件会悄悄吞掉消息"],
-  [/^More useful context sharing/i, "通过分支等方式复用会话上下文时，多个分支会把对话合并错"],
-  [/^ChatGPT Desktop: branch selection missing when starting a new Codex chat/i, "桌面版开始新的编程助手对话时找不到分支选择"],
-  [/^Codex frequently cannot read files in cloud projects/i, "编程助手经常无法读取云端项目文件"],
-  [/^Codex CLI 提示推理强度可用/i, "编程助手命令行中的推理强度快捷键提示不清楚"],
+/**
+ * 中文安全展示：只接受数据库已经生成的中文字段。
+ * 原始英文、技术日志和用户名不在前台做运行时翻译，调用方应提供中文 fallback。
+ */
+const EXACT_TRANSLATIONS = new Map<string, string>([
+  ["No Text-to-Speech Option Available in Codex Mobile", "编程助手移动版缺少文字转语音功能"],
+  ["Codex IDE plugin silently eats messages", "编程助手集成插件会悄悄吞掉消息"],
+  ["More useful context sharing (by forking or otherwise)", "通过分支等方式复用会话上下文时，多个分支会把对话合并错"],
+  ["ChatGPT Desktop: branch selection missing when starting a new Codex chat", "桌面版开始新的编程助手对话时找不到分支选择"],
+  ["Codex frequently cannot read files in cloud projects", "编程助手经常无法读取云端项目文件"],
+  ["AI coding models state their assumptions only 46% of the time", "人工智能编程模型只有约 46% 的情况下会说明自己的假设"],
+  ["Qwen Image 2.1 以极小的 70 亿参数模型击败 Google Nano Banana 2.0", "通义千问图像模型 2.1 以 70 亿参数模型击败谷歌香蕉模型 2.0"],
+  ["OliverDB：相对 Snowflake 为 9.67 倍，计算量少 8 倍", "奥利弗数据库：相对雪花数据仓库快 9.67 倍，计算量少 8 倍"],
+]);
+const PREFIX_TRANSLATIONS: Array<[string, string]> = [
+  ["No Text-to-Speech Option Available in Codex Mobile", "编程助手移动版缺少文字转语音功能"],
+  ["Codex IDE plugin silently eats messages", "编程助手集成插件会悄悄吞掉消息"],
+  ["More useful context sharing", "通过分支等方式复用会话上下文时，多个分支会把对话合并错"],
+  ["ChatGPT Desktop: branch selection missing", "桌面版开始新的编程助手对话时找不到分支选择"],
+  ["Codex frequently cannot read files in cloud projects", "编程助手经常无法读取云端项目文件"],
 ];
 
-/** 优先使用模型生成的中文；对已知英文标题做固定、可审计的产品化翻译。 */
 export function publicText(value: string | null | undefined, fallback: string): string {
   const text = value?.trim();
   if (!text) return fallback;
-  for (const [pattern, translation] of KNOWN_TRANSLATIONS) if (pattern.test(text)) return translation;
-  const normalized = text
-    .replace(/\bChatGPT\b/gi, "聊天助手")
-    .replace(/\bCodex\b/gi, "编程助手")
-    .replace(/\bAndroid\b/gi, "安卓")
-    .replace(/\bWindows\b/gi, "视窗系统")
-    .replace(/\bWSL\b/gi, "开源系统子系统")
-    .replace(/\bPairing\b/gi, "配对")
-    .replace(/\bAuthorize\b/gi, "授权")
-    .replace(/\bAllow this phone to access\b/gi, "允许手机访问")
-    .replace(/\bthis phone\b/gi, "这部手机")
-    .replace(/\bon your computer\b/gi, "在电脑上")
-    .replace(/\bText-to-Speech\b/gi, "文字转语音")
-    .replace(/\bplugin\b/gi, "插件")
-    .replace(/\bIDE\b/gi, "集成开发环境")
-    .replace(/\bCLI\b/gi, "命令行")
-    .replace(/\bRemote\b/gi, "远程")
-    .replace(/\bMobile\b/gi, "移动版")
-    .replace(/\bdaemon\b/gi, "后台服务")
-    .replace(/\bcontrol\b/gi, "控制")
-    .replace(/\bPro\b/gi, "专业版")
-    .replace(/\bbeta\b/gi, "测试版")
-    .replace(/\bUbuntu\b/gi, "乌班图系统")
-    .replace(/\bMacBook\b/gi, "苹果笔记本")
-    .replace(/\bNothing Phone\b/gi, "Nothing 手机")
-    .replace(/\bPixel\b/gi, "像素手机")
-    .replace(/\bBenchmark\b/gi, "基准测试")
-    .replace(/\bPowerShell\b/gi, "终端")
-    .replace(/\bChrome DevTools Protocol\b/gi, "浏览器调试协议")
-    .replace(/\bComputer Use\b/gi, "电脑操作")
-    .replace(/\bAny App\b/gi, "任意应用")
-    .replace(/\bTrusted RPC service is not configured:\s*sky\b/gi, "可信调用服务尚未配置")
-    .replace(/sky/gi, "系统后端")
-    .replace(/\bgetApp\/listApps\b/gi, "应用查询接口")
-    .replace(/\bWebView2\b/gi, "网页组件")
-    .replace(/\bQwen Image\b/gi, "通义千问图像模型")
-    .replace(/\bNano Banana\b/gi, "香蕉模型")
-    .replace(/\bGoogle\b/gi, "谷歌")
-    .replace(/\bOpenAI\b/gi, "开放人工智能")
-    .replace(/\bSnowflake\b/gi, "雪花数据仓库")
-    .replace(/\bClaude Code\b/gi, "克劳德编程助手")
-    .replace(/\bClaude\b/gi, "克劳德")
-    .replace(/\bGitHub\b/gi, "代码托管平台")
-    .replace(/\bVPN\b/gi, "网络代理")
-    .replace(/\bChrome\b/gi, "浏览器")
-    .replace(/\bmacOS\b/gi, "苹果电脑系统")
-    .replace(/\bMCP\b/gi, "工具协议")
-    .replace(/\bAPI\b/gi, "接口")
-    .replace(/\bAlt\b/gi, "替代键")
-    .replace(/\bDesktop\b/gi, "桌面版")
-    .replace(/\bBrowser Use\b/gi, "浏览器控制")
-    .replace(/\bSend feedback\b/gi, "发送反馈")
-    .replace(/\bElectron\s*\/\s*Chromium\b/gi, "桌面运行组件")
-    .replace(/\bPlan Mode\b/gi, "计划模式")
-    .replace(/\bAccept and Implement\b/gi, "确认并执行")
-    .replace(/\bAccept\b/gi, "确认")
-    .replace(/\bCowork\b/gi, "工作区")
-    .replace(/\bMissing HCS services\b/gi, "缺少系统服务")
-    .replace(/\bHCS\b/gi, "系统容器服务")
-    .replace(/\bHyper-V\b/gi, "系统虚拟化服务")
-    .replace(/\bMSIX\b/gi, "应用安装包")
-    .replace(/\brootfs\.vhdx(?:\.zst)?\b/gi, "虚拟机镜像文件")
-    .replace(/\bBrowser panel\b/gi, "浏览器面板")
-    .replace(/\bTab\b/gi, "标签键")
-    .replace(/\bFable\b/gi, "指定模型")
-    .replace(/\bDefault\b/gi, "默认")
-    .replace(/\busage credits\b/gi, "使用额度")
-    .replace(/\bPR\b/gi, "合并请求")
-    .replace(/\bmerged\b/gi, "已合并")
-    .replace(/\bRoutines\b/gi, "自动任务")
-    .replace(/\bneeds_approval\b/gi, "仍要求审批")
-    .replace(/\bXcode\b/gi, "苹果开发工具")
-    .replace(/\bCCR\b/gi, "连接器代理")
-    .replace(/\bstatsig\b/gi, "统计服务")
-    .replace(/\bcommit\b/gi, "提交记录")
-    .replace(/\bfeedback\b/gi, "反馈")
-    .replace(/\bnet::ERR_CONNECTION_CLOSED\b/gi, "网络连接被关闭")
-    .replace(/\bBrowser\s*面板\b/gi, "浏览器面板")
-    .replace(/\bBrowser\b/gi, "浏览器")
-    .replace(/\bAgent\b/gi, "智能代理")
-    .replace(/\bModel\b/gi, "模型")
-    .replace(/\bGPT-6\s+Astra\s+Ultra\b/gi, "第六代高阶推理档位")
-    .replace(/\bGPT-6\b/gi, "第六代模型")
-    .replace(/\bHigh\b/gi, "高强度")
-    .replace(/\bBash\b/gi, "命令工具")
-    .replace(/\bpython\b/gi, "脚本工具")
-    .replace(/\brm\s+-rf\s+\$UNDEFINED_VAR\/\*\b/gi, "删除未定义路径")
-    .replace(/\bGit\b/gi, "代码版本库")
-    .replace(/\bvfpext\b/gi, "虚拟化驱动组件")
-    .replace(/\bCBS\b/gi, "系统组件日志")
-    .replace(/\bCSI\b/gi, "系统安装服务")
-    .replace(/\bDISM\b/gi, "系统映像修复工具")
-    .replace(/\bSFC\b/gi, "系统文件修复工具")
-    .replace(/\bsc\s+start\b/gi, "启动服务")
-    .replace(/\bERROR\b/gi, "错误")
-    .replace(/\bUUID\b/gi, "唯一编号")
-    .replace(/\bhome\b/gi, "主目录")
-    .replace(/\bmeta\b/gi, "元数据")
-    .replace(/\bLinux\b/gi, "开源系统")
-    .replace(/\bAlibaba\s*\/\s*Qwen\b/gi, "阿里巴巴 / 通义千问")
-    .replace(/\bOliverDB\s*\/\s*OliverAI\b/gi, "奥利弗数据库")
-    .replace(/OliverDB/gi, "奥利弗数据库")
-    .replace(/\bBito\b/gi, "比托")
-    .replace(/\bAI\b/gi, "人工智能");
-  return /[\u3400-\u9fff]/.test(normalized)
-    ? normalized.replace(/初始化系统后端原生后端/g, "初始化系统后端").replace(/网络代理\/代理/g, "网络代理").replace(/远程-控制/g, "远程控制").replace(/elevated\s+sandbox/gi, "提升权限的沙箱").replace(/\s+/g, " ").replace(/([\u3400-\u9fff])\s+/g, "$1").replace(/\s+([\u3400-\u9fff])/g, "$1")
-    : fallback;
+  const exact = EXACT_TRANSLATIONS.get(text);
+  if (exact) return exact;
+  const prefix = PREFIX_TRANSLATIONS.find(([source]) => text.startsWith(source));
+  if (prefix) return prefix[1];
+  if (/[A-Za-z]/.test(text)) return fallback;
+  return text;
+}
+
+export function displaySource(value: string | null | undefined): string {
+  const text = value?.toLowerCase() ?? "";
+  if (text.includes("github")) return "代码托管平台";
+  if (text.includes("hacker") || text === "hn") return "技术社区";
+  if (text.includes("openai")) return "开发者社区";
+  if (text.includes("reddit")) return "讨论社区";
+  return "公开来源";
+}
+
+export function displayClaimant(value: string | null | undefined): string {
+  if (value === "Alibaba / Qwen") return "阿里巴巴 / 通义千问";
+  if (value === "OliverDB / OliverAI") return "奥利弗数据库";
+  if (value === "Bito") return "比托";
+  return value && !/[A-Za-z]/.test(value) ? value : "未标注提出方";
 }
