@@ -2,7 +2,7 @@ import { Link, useLoaderData } from "react-router";
 import type { Route } from "./+types/demands";
 import { loadOr404 } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
-import { buildDateGroups, formatShanghaiTime } from "../lib/date-groups";
+import { buildDateGroups, compareLatestDesc, formatShanghaiTime } from "../lib/date-groups";
 import { publicText } from "../lib/public-text";
 
 type Sample = {
@@ -49,7 +49,8 @@ export function headers() {
 
 export default function DemandsPage() {
   const data = useLoaderData<typeof loader>();
-  const grouped = buildDateGroups([...data.themes].sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)), (theme) => theme.latestAt);
+  const compareLatest = compareLatestDesc<Theme>((theme) => theme.latestAt);
+  const grouped = buildDateGroups(data.themes, (theme) => theme.latestAt, new Date(), (a, b) => compareLatest(a, b) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey));
   return (
     <div className="pb-10">
       <header className="pb-5 pt-5 lg:pt-1">
