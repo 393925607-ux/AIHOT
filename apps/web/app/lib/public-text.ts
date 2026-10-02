@@ -116,6 +116,6 @@ export function publicText(value: string | null | undefined, fallback: string): 
     .replace(/\bBito\b/gi, "比托")
     .replace(/\bAI\b/gi, "人工智能");
   return /[\u3400-\u9fff]/.test(normalized)
-    ? normalized.replace(/网络代理\/代理/g, "网络代理").replace(/远程-控制/g, "远程控制").replace(/elevated\s+sandbox/gi, "提升权限的沙箱").replace(/\s+/g, " ").replace(/([\u3400-\u9fff])\s+/g, "$1").replace(/\s+([\u3400-\u9fff])/g, "$1")
+    ? normalized.replace(/初始化系统后端原生后端/g, "初始化系统后端").replace(/网络代理\/代理/g, "网络代理").replace(/远程-控制/g, "远程控制").replace(/elevated\s+sandbox/gi, "提升权限的沙箱").replace(/\s+/g, " ").replace(/([\u3400-\u9fff])\s+/g, "$1").replace(/\s+([\u3400-\u9fff])/g, "$1")
     : fallback;
 }
