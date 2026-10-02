@@ -4,18 +4,18 @@
 
 export const SITE = {
   /** 站名：导航、页面标题、分享图、RSS、MCP、后台都用它。 */
-  name: "AI Reality Radar",
+  name: "人工智能现实雷达",
   /**
    * 行业词：拼进默认说法里，比如“AI 日报”“AI 动态”。
    * 改成“法律”“HR”“黄金”之类，页面上就会变成“法律日报”“法律动态”。
    */
-  subject: "AI",
+  subject: "人工智能",
   /** 首页的完整标题（浏览器标签、搜索结果）。 */
-  homeTitle: "AI Reality Radar — AI 现实信号",
+  homeTitle: "人工智能现实雷达｜看真实需求，也查人工智能牛皮",
   /** 一句话介绍：搜索引擎、分享卡片、RSS、llms.txt 会用。 */
-  description: "把 AI 工具真实用户需求与公开 Claim 放在同一张现实雷达上，保留原始证据与不确定性。",
+  description: "看真实用户正在解决什么问题，也核查人工智能厂商、创始人与媒体提出的强主张；保留原始证据和不确定性。",
   /** 首页左上角和侧边栏下面的一行小字。 */
-  tagline: "AI 现实信号",
+  tagline: "看真实需求，也查人工智能牛皮",
   /** 界面语言（HTML lang、og:locale）。 */
   locale: "zh-CN",
   /** 默认域名，只在没设置 SITE_URL 时使用。 */
@@ -33,19 +33,19 @@ export const SITE = {
   icp: null as string | null,
   /** 结构化数据里的网站运营者（搜索引擎用）。 */
   organization: {
-    name: "MyHOT",
+    name: "人工智能现实雷达",
     /** 创始人（选填）：{ name, url, description }。 */
     founder: null as null | { name: string; url?: string; description?: string },
   },
   /** 抓取信源时报上的名字（User-Agent 里用），不要冒用别的站。 */
-  crawlerName: "MyHOTBot",
+  crawlerName: "现实雷达采集器",
 } as const;
 
 /** 关于页的文案。数字（信源数、收录数、精选数、日报期数）来自站内实时统计，不用写在这里。 */
 export const ABOUT = {
   kicker: `关于 ${SITE.name}`,
   /** 大标题：第一行正常颜色，第二行强调色。 */
-  headline: ["AI 圈每天都有新动静，", "值得看的，只有几条。"] as [string, string],
+  headline: ["人工智能圈每天都有新动静，", "值得看的，只有几条。"] as [string, string],
   /** 标题下面的一段话。{sources} 会换成实时的信源数。 */
   lead: `${SITE.name} 替你盯着 {sources} 个信源：抓取、归并、打分、精选，每天早上 8 点出一份日报。免费，不用注册。`,
   /** 信源河动画下面的四个环节。 */
