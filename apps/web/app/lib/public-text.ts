@@ -36,6 +36,7 @@ export function publicText(value: string | null | undefined, fallback: string): 
     .replace(/\bUbuntu\b/gi, "乌班图系统")
     .replace(/\bMacBook\b/gi, "苹果笔记本")
     .replace(/\bNothing Phone\b/gi, "Nothing 手机")
+    .replace(/\bPixel\b/gi, "像素手机")
     .replace(/\bBenchmark\b/gi, "基准测试")
     .replace(/\bPowerShell\b/gi, "终端")
     .replace(/\bChrome DevTools Protocol\b/gi, "浏览器调试协议")
@@ -114,6 +115,6 @@ export function publicText(value: string | null | undefined, fallback: string): 
     .replace(/\bBito\b/gi, "比托")
     .replace(/\bAI\b/gi, "人工智能");
   return /[\u3400-\u9fff]/.test(normalized)
-    ? normalized.replace(/网络代理\/代理/g, "网络代理").replace(/elevated\s+sandbox/gi, "提升权限的沙箱").replace(/\s+/g, " ").replace(/([\u3400-\u9fff])\s+/g, "$1").replace(/\s+([\u3400-\u9fff])/g, "$1")
+    ? normalized.replace(/网络代理\/代理/g, "网络代理").replace(/远程-控制/g, "远程控制").replace(/elevated\s+sandbox/gi, "提升权限的沙箱").replace(/\s+/g, " ").replace(/([\u3400-\u9fff])\s+/g, "$1").replace(/\s+([\u3400-\u9fff])/g, "$1")
     : fallback;
 }
