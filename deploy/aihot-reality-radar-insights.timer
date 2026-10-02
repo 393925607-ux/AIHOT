@@ -1,0 +1,11 @@
+[Unit]
+Description=Run AI Reality Radar content validity pipeline daily
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+Unit=aihot-reality-radar-insights.service
+
+[Install]
+WantedBy=timers.target

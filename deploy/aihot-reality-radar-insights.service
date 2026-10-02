@@ -1,0 +1,19 @@
+[Unit]
+Description=AI Reality Radar content validity pipeline
+After=aihot-reality-radar-db.service
+Requires=aihot-reality-radar-db.service
+
+[Service]
+Type=oneshot
+User=opc
+Group=opc
+WorkingDirectory=/home/opc/Documents/Codex/2026-10-01/hermes-kr-aihot-https-github-com
+Environment=HOME=/home/opc
+Environment=PATH=/home/opc/.local/bin:/home/opc/bin:/usr/local/bin:/usr/bin
+EnvironmentFile=/etc/aihot-reality-radar.env
+RuntimeDirectory=aihot-reality-radar
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock -n /run/aihot-reality-radar/insights.lock /bin/bash -c 'set -Eeuo pipefail; scripts/run-insights.sh coverage --resume && scripts/run-insights.sh group-demands && scripts/run-insights.sh cross-platform && scripts/run-insights.sh claim-gate && scripts/run-insights.sh claim-depth'
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStartSec=1800

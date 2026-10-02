@@ -13,6 +13,7 @@ export type Claim = {
   id: number; claim: string; claimant: string; claimType: "性能" | "成本" | "用户量" | "Benchmark" | "产品能力";
   originalSource: string; evidence: ClaimEvidence[]; status: "未验证" | "部分支持" | "有较强支持" | "存在冲突证据";
   missingEvidence: string; observedAt: string; topicKey: string | null; topicLabel: string | null;
+  claimantName?: string | null; claimantType?: string | null; claimantInterest?: string | null; originalClaimUrl?: string | null;
   claimZh?: string | null; supportCount?: number; conflictCount?: number; relatedCount?: number;
 };
 export type Signal = {
@@ -21,7 +22,7 @@ export type Signal = {
 };
 
 type DemandRow = { theme_key: string; theme_title: string; latest_at: Date; samples: DemandSample[] };
-type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claim_type: Claim["claimType"]; original_source: string; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; topic_key: string | null; topic_label: string | null };
+type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claimant_name: string | null; claimant_type: string | null; claimant_interest: string | null; claim_type: Claim["claimType"]; original_source: string; original_claim_url: string | null; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; topic_key: string | null; topic_label: string | null };
 
 async function readDemandThemes(q: string | null, limit: number, themeKey: string | null = null): Promise<DemandTheme[]> {
   const rows = await sql<DemandRow[]>`
@@ -57,16 +58,16 @@ export async function loadClaims(opts: { q?: string | null; status?: string | nu
   const status = opts.status && ["未验证", "部分支持", "有较强支持", "存在冲突证据"].includes(opts.status) ? opts.status : null;
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const rows = await sql<ClaimRow[]>`
-    SELECT c.id, c.claim, c.claim_zh, c.claimant, c.claim_type, c.original_source, c.evidence, c.status, c.missing_evidence, c.observed_at, c.topic_key, c.topic_label
-    FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})
+    SELECT c.id, c.claim, c.claim_zh, c.claimant, c.claimant_name, c.claimant_type, c.claimant_interest, c.claim_type, c.original_source, c.original_claim_url, c.evidence, c.status, c.missing_evidence, c.observed_at, c.topic_key, c.topic_label
+    FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})
     ORDER BY c.observed_at DESC, c.id DESC LIMIT ${limit}`;
-  const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})`;
-  return { claims: rows.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimType: r.claim_type, originalSource: r.original_source, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })), total, generatedAt: new Date().toISOString() };
+  const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})`;
+  return { claims: rows.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimantName: r.claimant_name, claimantType: r.claimant_type, claimantInterest: r.claimant_interest, claimType: r.claim_type, originalSource: r.original_claim_url ?? r.original_source, originalClaimUrl: r.original_claim_url, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })), total, generatedAt: new Date().toISOString() };
 }
 
 export async function loadClaim(id: number): Promise<Claim | null> {
-  const [r] = await sql<ClaimRow[]>`SELECT id, claim, claim_zh, claimant, claim_type, original_source, evidence, status, missing_evidence, observed_at, topic_key, topic_label FROM insight_claims WHERE id = ${id} AND strong_claim`;
-  return r ? { id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimType: r.claim_type, originalSource: r.original_source, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length } : null;
+  const [r] = await sql<ClaimRow[]>`SELECT id, claim, claim_zh, claimant, claimant_name, claimant_type, claimant_interest, claim_type, original_source, original_claim_url, evidence, status, missing_evidence, observed_at, topic_key, topic_label FROM insight_claims WHERE id = ${id} AND strong_claim`;
+  return r ? { id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimantName: r.claimant_name, claimantType: r.claimant_type, claimantInterest: r.claimant_interest, claimType: r.claim_type, originalSource: r.original_claim_url ?? r.original_source, originalClaimUrl: r.original_claim_url, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length } : null;
 }
 
 export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?: string | null; topicKey?: string | null; limit?: number } = {}): Promise<{ signals: Signal[]; total: number; topics: Array<{ key: string; label: string; count: number }>; generatedAt: string }> {
@@ -82,8 +83,8 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
     ORDER BY d.observed_at DESC LIMIT ${limit}`;
   const claims = type === "demand" ? [] : await sql<Signal[]>`
     SELECT 'claim' AS kind, c.id, c.topic_key AS "topicKey", c.topic_label AS "topicLabel", coalesce(c.claim_zh, c.claim) AS title,
-           c.claimant || ' · ' || c.claim_type AS detail, c.original_source AS "sourceUrl", c.claimant AS actor, c.status, c.observed_at AS "observedAt"
-    FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q}) AND (${topic}::text IS NULL OR c.topic_key = ${topic})
+           coalesce(c.claimant_name, c.claimant) || ' · ' || c.claim_type AS detail, coalesce(c.original_claim_url, c.original_source) AS "sourceUrl", coalesce(c.claimant_name, c.claimant) AS actor, c.status, c.observed_at AS "observedAt"
+    FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${topic}::text IS NULL OR c.topic_key = ${topic})
     ORDER BY c.observed_at DESC LIMIT ${limit}`;
   const signals = [...demands, ...claims].sort((a, b) => b.id - a.id).slice(0, limit);
   const topics = await sql<{ key: string; label: string; count: number }[]>`
@@ -97,11 +98,11 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
 export async function loadTopicDetail(topicKey: string): Promise<{ topic: { key: string; label: string }; demands: DemandSample[]; claims: Claim[] } | null> {
   const [demands, claims] = await Promise.all([
     sql<DemandSample[]>`SELECT id, problem, scenario, workaround, evidence, original_url AS "originalUrl", source_name AS "sourceName", source_user AS "sourceUser", source_kind AS "sourceKind", observed_at AS "observedAt", topic_key AS "topicKey", topic_label AS "topicLabel", problem_zh AS "problemZh", scenario_zh AS "scenarioZh", workaround_zh AS "workaroundZh" FROM insight_demands WHERE is_testimony AND topic_key = ${topicKey} ORDER BY observed_at DESC`,
-    sql<ClaimRow[]>`SELECT id, claim, claim_zh, claimant, claim_type, original_source, evidence, status, missing_evidence, observed_at, topic_key, topic_label FROM insight_claims WHERE topic_key = ${topicKey} ORDER BY observed_at DESC`,
+    sql<ClaimRow[]>`SELECT id, claim, claim_zh, claimant, claimant_name, claimant_type, claimant_interest, claim_type, original_source, original_claim_url, evidence, status, missing_evidence, observed_at, topic_key, topic_label FROM insight_claims WHERE strong_claim AND topic_key = ${topicKey} ORDER BY observed_at DESC`,
   ]);
   if (!demands.length && !claims.length) return null;
   const label = demands[0]?.topicLabel ?? claims[0]?.topic_label ?? topicKey;
-  return { topic: { key: topicKey, label }, demands, claims: claims.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimType: r.claim_type, originalSource: r.original_source, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })) };
+  return { topic: { key: topicKey, label }, demands, claims: claims.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimantName: r.claimant_name, claimantType: r.claimant_type, claimantInterest: r.claimant_interest, claimType: r.claim_type, originalSource: r.original_claim_url ?? r.original_source, originalClaimUrl: r.original_claim_url, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })) };
 }
 
 export async function loadDemandTheme(themeKey: string): Promise<DemandTheme | null> {

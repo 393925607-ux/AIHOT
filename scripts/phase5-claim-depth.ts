@@ -24,9 +24,10 @@ const candidates: Record<number, Candidate[]> = {
 };
 const Relation = z.object({ relation: z.string(), confidence: z.string().optional(), quote: z.string().optional(), reason: z.string().optional() });
 const VerdictOutput = z.object({ claim_id: z.number().optional(), verdict: z.string(), quote: z.string().optional(), reason: z.string().optional() });
-const RelationOutput = z.union([Relation, VerdictOutput, z.object({ result: Relation }), z.object({ judgement: Relation })]);
-function normalizeRelation(raw: z.infer<typeof Relation> | z.infer<typeof VerdictOutput>) {
-  const r = ("verdict" in raw ? raw.verdict : raw.relation).toLowerCase();
+const JudgmentOutput = z.object({ claim_id: z.number().optional(), judgment: z.string(), quote: z.string().optional(), reason: z.string().optional() });
+const RelationOutput = z.union([Relation, VerdictOutput, JudgmentOutput, z.object({ result: Relation }), z.object({ judgement: Relation })]);
+function normalizeRelation(raw: z.infer<typeof Relation> | z.infer<typeof VerdictOutput> | z.infer<typeof JudgmentOutput>) {
+  const r = ("verdict" in raw ? raw.verdict : "judgment" in raw ? raw.judgment : raw.relation).toLowerCase();
   const relation = r.includes("support") || r.includes("支持") ? "supports" : r.includes("conflict") || r.includes("冲突") || r.includes("contrad") ? "conflicts" : r.includes("unrelated") || r.includes("无关") ? "unrelated" : "related";
   const c = ("confidence" in raw ? raw.confidence ?? "medium" : "medium").toLowerCase();
   const confidence = c.includes("high") || c.includes("高") ? "high" : c.includes("low") || c.includes("低") ? "low" : "medium";
@@ -53,7 +54,7 @@ async function main() {
       let relation: ReturnType<typeof normalizeRelation>;
       try {
         const result = await judge("claim_evidence_depth_v5", `claim:${claim.id}:${domain(item.url)}`, "判断候选网页是否对原始 Claim 提供直接证据。只返回 JSON。supports 只用于候选明确测量/复现了同一主张；conflicts 只用于明确反驳同一主张或在相同指标上给出相反结果；只有相关背景、转载、同源材料或缺少相同测试条件才用 related；完全无关用 unrelated。quote 必须逐字来自候选文本，不得补写。", { claim: { id: claim.id, text: claim.claim, claimant: claim.claimant, originalSource: claim.original_source }, candidate: { url: item.url, source: item.label, domain: domain(item.url), text: item.text.slice(0, 7000) } }, RelationOutput, 1800);
-        const raw = result.data; relation = normalizeRelation("relation" in raw || "verdict" in raw ? raw : "result" in raw ? raw.result : raw.judgement); judged++;
+        const raw = result.data; relation = normalizeRelation("relation" in raw || "verdict" in raw || "judgment" in raw ? raw : "result" in raw ? raw.result : raw.judgement); judged++;
       } catch (error) { audit[`error_${domain(item.url)}`] = error instanceof Error ? error.message.slice(0, 240) : "judge_failed"; continue; }
       if (relation.relation === "unrelated") continue;
       const same = publicCanonical(item.url) === publicCanonical(claim.original_source) || domain(item.url) === domain(claim.original_source);
@@ -72,6 +73,8 @@ async function main() {
     audit["evidenceCount"] = evidence.length; audit["independentSupports"] = evidence.filter(e => e.kind === "support" && e.independent).length; audit["independentConflicts"] = evidence.filter(e => e.kind === "conflict" && e.independent).length;
     await sql`UPDATE insight_claims SET evidence=${sql.json(evidence as never)}, evidence_audit=${sql.json(audit as never)}, status=${status}, missing_evidence=${missing}, evidence_updated_at=now(), relation_reviewed=true WHERE id=${claim.id}`;
   }
-  console.log(JSON.stringify({ ok: true, claims: claims.length, fetched, judged, independentSupports: supports, independentConflicts: conflicts }));
+  const partial = fetched > 0 && judged < fetched;
+  console.log(JSON.stringify({ ok: !partial, claims: claims.length, fetched, judged, independentSupports: supports, independentConflicts: conflicts, partial }));
+  if (partial) process.exitCode = 1;
 }
 try { await main(); } finally { await closeDb(); }

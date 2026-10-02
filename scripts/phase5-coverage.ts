@@ -93,6 +93,6 @@ async function main(){
   const summary={rootTotal:all.length,eligible:all.filter(r=>r.coverage?.eligible===true).length,complete:all.filter(r=>r.coverage?.complete===true).length,judgementComplete:all.filter(r=>r.coverage?.judgementComplete===true).length,coverageReadComplete:all.every(r=>r.coverage?.commentsRead===true),commentsRead:all.filter(r=>r.coverage?.commentsRead===true).length,noComments:all.filter(r=>r.coverage?.noComments===true).length,failures:all.filter(r=>r.coverage?.error).length,commentsChecked:all.reduce((s,r)=>s+Number(r.coverage?.commentsChecked ?? 0),0),qualifiedTestimony:all.reduce((s,r)=>s+Number(r.coverage?.accepted ?? 0),0)};
   mkdirSync('.data/phase5',{recursive:true,mode:0o700});
   writeFileSync('.data/phase5/coverage.json',JSON.stringify({summary,roots:all},null,2),{mode:0o600});
-  console.log(JSON.stringify(summary));if(!summary.coverageReadComplete || summary.failures) process.exitCode=1;
+  console.log(JSON.stringify(summary));if(!summary.coverageReadComplete || summary.failures || summary.judgementComplete!==summary.rootTotal) process.exitCode=1;
 }
 try{await main();}finally{await closeDb();}
