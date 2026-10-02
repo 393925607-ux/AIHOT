@@ -23,7 +23,7 @@ export default function SignalsPage() {
   const groups = buildDateGroups([...data.signals].sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt) || b.id - a.id), (signal) => signal.observedAt);
   return <div className="pb-10">
     <header className="pb-5 pt-5 lg:pt-1">
-      <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">人工智能现实雷达</p>
+      <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">兼容视图</p>
       <h1 className="mt-1.5 text-[25px] font-bold tracking-[-0.01em] text-ink">人工智能现实雷达</h1>
       <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">把真实用户需求和公开传播的主张放到同一张信号图上，只保留材料、主题和证据，不替你做商业判断。</p>
       <nav className="mt-4 flex gap-2" aria-label="内容类型">{tabs.map((tab) => <Link key={tab.key} to={tab.key ? `/signals?type=${tab.key}` : "/signals"} className={`rounded-full px-3 py-1.5 text-[12.5px] ${type === (tab.key || null) ? "bg-accent text-white" : "bg-bg-sunk text-ink-3 hover:text-ink"}`}>{tab.label}</Link>)}</nav>
