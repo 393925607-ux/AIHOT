@@ -9,6 +9,7 @@ const EXACT_TRANSLATIONS = new Map<string, string>([
   ["ChatGPT Desktop: branch selection missing when starting a new Codex chat", "桌面版开始新的编程助手对话时找不到分支选择"],
   ["Codex frequently cannot read files in cloud projects", "编程助手经常无法读取云端项目文件"],
   ["AI coding models state their assumptions only 46% of the time", "人工智能编程模型只有约 46% 的情况下会说明自己的假设"],
+  ["AI 编程模型仅在 46% 的情况下陈述其假设", "人工智能编程模型只有约 46% 的情况下会说明自己的假设"],
   ["Qwen Image 2.1 以极小的 70 亿参数模型击败 Google Nano Banana 2.0", "通义千问图像模型 2.1 以 70 亿参数模型击败谷歌香蕉模型 2.0"],
   ["OliverDB：相对 Snowflake 为 9.67 倍，计算量少 8 倍", "奥利弗数据库：相对雪花数据仓库快 9.67 倍，计算量少 8 倍"],
 ]);
