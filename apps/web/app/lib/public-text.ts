@@ -49,6 +49,7 @@ export function publicText(value: string | null | undefined, fallback: string): 
     .replace(/\bQwen Image\b/gi, "通义千问图像模型")
     .replace(/\bNano Banana\b/gi, "香蕉模型")
     .replace(/\bGoogle\b/gi, "谷歌")
+    .replace(/\bOpenAI\b/gi, "开放人工智能")
     .replace(/\bSnowflake\b/gi, "雪花数据仓库")
     .replace(/\bClaude Code\b/gi, "克劳德编程助手")
     .replace(/\bClaude\b/gi, "克劳德")
