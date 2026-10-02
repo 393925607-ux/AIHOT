@@ -34,7 +34,7 @@ export default function SignalsPage() {
         <h2 className="mt-2 text-[16px] font-semibold leading-relaxed text-ink">{publicText(signal.title, "已收录一条公开材料")}</h2><p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{signal.kind === "demand" ? "用户在实际使用中遇到了这个问题。" : publicText(signal.detail, "提出方公开发布了这项主张。")}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ink-4"><span>{signal.kind === "demand" ? "真实用户反馈" : "公开主张"}</span><span>·</span><a href={signal.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:text-accent-ink">查看原文 ↗</a></div>
       </article>)}</div></section>)}</div>
-      <aside className="card h-fit p-4"><h2 className="text-[13px] font-semibold text-ink">共享 Topic</h2><div className="mt-2 space-y-1.5">{data.topics.map((topic) => <Link key={topic.key} to={`/signals/topic/${topic.key}`} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-[12.5px] text-ink-3 hover:bg-bg-sunk hover:text-ink"><span className="truncate">{topic.label}</span><span className="num text-ink-4">{topic.count}</span></Link>)}</div></aside>
+      <aside className="card h-fit p-4"><h2 className="text-[13px] font-semibold text-ink">共享主题</h2><div className="mt-2 space-y-1.5">{data.topics.map((topic) => <Link key={topic.key} to={`/signals/topic/${topic.key}`} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-[12.5px] text-ink-3 hover:bg-bg-sunk hover:text-ink"><span className="truncate">{publicText(topic.label, "相关主题")}</span><span className="num text-ink-4">{topic.count}</span></Link>)}</div></aside>
     </div>
   </div>;
 }
