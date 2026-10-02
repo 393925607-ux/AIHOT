@@ -26,7 +26,7 @@ function SignalCard({ signal }: { signal: Signal }) {
       <time className="ml-auto" dateTime={signal.observedAt}>{formatShanghaiTime(signal.observedAt)}</time>
     </div>
     <h2 className="mt-2 text-[17px] font-semibold leading-relaxed text-ink">{publicText(signal.title, "已收录一条公开材料")}</h2>
-    <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-3">{signal.kind === "demand" ? "用户在实际使用中遇到了这个问题。" : publicText(signal.detail, "提出方公开发布了这项主张。")}</p>
+    <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-3">{signal.kind === "demand" ? publicText(signal.detail, "已收录真实用户反馈。") : publicText(signal.detail, "提出方公开发布了这项主张。")}</p>
     <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-4"><span>{signal.kind === "demand" ? "真实用户反馈" : "公开主张"}</span><span>·</span><a href={signal.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:text-accent-ink">查看原文 ↗</a></div>
   </article>;
 }
