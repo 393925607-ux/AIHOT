@@ -47,6 +47,7 @@ type Policy = {
   claimantType: (typeof CLAIMANT_TYPES)[number];
   claimantInterest: (typeof INTERESTS)[number];
   claimType?: (typeof CLAIM_TYPES)[number];
+  originalClaimUrl?: string;
   reason: string;
 };
 
@@ -55,7 +56,7 @@ type Policy = {
 // benchmark/project announcements remain discoverable evidence, never Claims.
 const POLICY: Record<number, Policy> = {
   165: { eligible: true, claimantName: "Bito", claimantType: "company", claimantInterest: "interested", claimType: "Benchmark", reason: "Bito publishes the measured 46% assumption-rate assertion." },
-  181: { eligible: true, claimantName: "Alibaba / Qwen", claimantType: "company", claimantInterest: "interested", claimType: "Benchmark", reason: "The source reports Alibaba/Qwen's concrete model comparison; the HN author is only the discovery actor." },
+  181: { eligible: true, claimantName: "Alibaba / Qwen", claimantType: "company", claimantInterest: "interested", claimType: "Benchmark", originalClaimUrl: "https://github.com/QwenLM/Qwen-Image-2.1", reason: "The source reports Alibaba/Qwen's concrete model comparison; the HN author is only the discovery actor." },
   195: { eligible: true, claimantName: "OliverDB / OliverAI", claimantType: "company", claimantInterest: "interested", reason: "OliverDB publishes a concrete performance/cost comparison with explicit numbers." },
   177: { eligible: false, claimantName: "Raycaster", claimantType: "benchmark_publisher", claimantInterest: "independent", reason: "Independent benchmark result is evidence, not an interested-party Claim." },
   183: { eligible: false, claimantName: "Krisp", claimantType: "company", claimantInterest: "interested", reason: "Krisp's open STT benchmark announcement describes a dataset and method, not a product Claim." },
@@ -117,7 +118,7 @@ async function main() {
     const claimantType = policy?.claimantType ?? model?.claimantType ?? null;
     const claimantInterest = policy?.claimantInterest ?? model?.claimantInterest ?? null;
     const claimType = policy?.claimType ?? model?.claimType ?? claim.claim_type;
-    const originalClaimUrl = usableUrl(model?.originalClaimUrl, claim.original_source);
+    const originalClaimUrl = usableUrl(model?.originalClaimUrl, policy?.originalClaimUrl ?? claim.original_source);
     const judgement = {
       phase: 6,
       reviewedAt: now,
