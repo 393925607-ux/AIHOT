@@ -19,7 +19,11 @@ async function main() {
     console.log(JSON.stringify({ ok:true, cached:true, roots:roots.length, groups:groups.size, candidates:0, judged:0, failures:0, mergedRoots:roots.length-groups.size }));
     return;
   }
-  const fresh = roots.filter((r) => ["github_discussion", "stackexchange", "hf_discourse"].includes(r.source_kind) && !Number.isInteger(r.grouping_judgement?.groupAnchor));
+  // Grouping is a resumable budgeted stage.  A full pairwise pass over every
+  // historical root can outlive the daily service timeout; ungrouped roots
+  // remain durable work for the next cycle rather than being silently skipped.
+  const groupBudget = Math.max(1, Math.min(Number(process.env.GROUP_DEMAND_MAX ?? 12), 30));
+  const fresh = roots.filter((r) => !Number.isInteger(r.grouping_judgement?.groupAnchor)).slice(0, groupBudget);
   if (fresh.length) {
     const vectors = await ensureEmbeddings("fact", roots.map((r) => ({ id: `phase5-demand:${r.id}`, text: `${r.problem_zh}\n${r.scenario_zh}\n${r.testimony_judgement?.quote ?? ""}` })));
     const resolved = new Map<number, { themeKey: string; themeTitle: string; anchorId: number }>();
@@ -38,7 +42,7 @@ async function main() {
       resolved.set(root.id, target);
       await sql`UPDATE insight_demands SET theme_key=${target.themeKey},theme_title=${target.themeTitle},grouping_judgement=${sql.json({ phase: 5, groupAnchor: target.anchorId, groupSize: 1, newSource: true, review } as never)} WHERE source_kind=${root.source_kind} AND source_item_id=${root.source_item_id} AND coalesce(grouping_judgement->>'manualOverride','') = ''`;
     }
-    const summary = { roots: roots.length, freshRoots: fresh.length, matched, judged, failures };
+    const summary = { roots: roots.length, freshRoots: fresh.length, deferredRoots: Math.max(0, roots.length - fresh.length), matched, judged, failures };
     mkdirSync(".data/phase5", { recursive: true, mode: 0o700 }); writeFileSync(".data/phase5/grouping-new.json", JSON.stringify({ summary, assignments: Object.fromEntries(resolved) }, null, 2), { mode: 0o600 });
     console.log(JSON.stringify({ ok: failures === 0, ...summary })); if (failures) process.exitCode = 1;
     return;
