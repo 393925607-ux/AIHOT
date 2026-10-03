@@ -5,7 +5,7 @@ import { sql, closeDb } from "@aihot/backend/db";
 import { acceptedTestimony, sameQuote } from "@aihot/backend/insights/validity";
 import { github, judge, parallel, safeError } from "./phase4-common.ts";
 
-type Root = { id: number; original_url: string; source_item_id: string; problem: string; theme_key: string; testimony_judgement: unknown };
+type Root = { id: number; original_url: string; source_item_id: string; problem: string; theme_key: string; created_at: string; testimony_judgement: unknown };
 type Issue = { title: string; body: string | null; html_url: string; comments: number; user: { login: string; type: string }; updated_at: string; pull_request?: unknown };
 type Comment = { id: number; body: string | null; html_url: string; user: { login: string; type: string }; updated_at: string; author_association: string };
 const RootResult = z.object({ valid: z.boolean(), confidence: z.enum(["high","medium","low"]), problem_zh: z.string().min(1).max(800), scenario_zh: z.string().max(800), workaround_zh: z.string().max(800), quote: z.string().max(800), reason: z.string().max(600) });
@@ -14,7 +14,7 @@ const results: Array<Record<string, unknown>> = [];
 const sourceText = (s: string) => s.replace(/Bearer\s+[A-Za-z0-9._-]{16,}|\bsk-[A-Za-z0-9_-]{16,}/gi, "[credential redacted]");
 
 async function scan(root: Root) {
-  const coverage: Record<string, unknown> = { phase: 5, rootId: root.id, eligible: false, commentsRead: false, noComments: false, commentsChecked: 0, candidatesJudged: 0, accepted: 0, judgementFailures: 0, startedAt: new Date().toISOString(), complete: false };
+  const coverage: Record<string, unknown> = { phase: 5, rootId: root.id, eligible: false, commentsRead: false, noComments: false, commentsChecked: 0, candidatesJudged: 0, accepted: 0, judgementFailures: 0, startedAt: new Date().toISOString(), complete: false, lifecycleStatus: "reported", firstSeenAt: root.created_at, lastCheckedAt: new Date().toISOString(), attribution: { sourcePlatform: "github", sourceOwner: "GitHub", affectedVendor: "unknown", affectedProduct: "unknown", modelProvider: "unknown", accessChannel: "GitHub Issues", claimant: "issue author" } };
   try {
     const match = /^https:\/\/github.com\/([^/]+\/[^/]+)\/issues\/(\d+)\/?$/.exec(root.original_url);
     if (!match) throw new Error("Unsupported GitHub issue URL");
@@ -22,6 +22,9 @@ async function scan(root: Root) {
     const issue = await github<Issue>(`repos/${repo}/issues/${issueNumber}`, { refresh: true });
     if (issue.pull_request) throw new Error("Pull request is not an issue root");
     const body = sourceText(issue.body ?? "");
+    coverage.sourcePublishedAt = issue.updated_at;
+    coverage.lastMaterialUpdateAt = issue.updated_at;
+    coverage.lastCheckedAt = new Date().toISOString();
     const rows: Comment[] = [];
     // Retrieve every page until a short page, rather than silently capping at 300 comments.
     for (let page = 1; ; page++) {
@@ -97,14 +100,19 @@ async function scan(root: Root) {
 async function main(){
   if(process.argv.includes('--migrate')){await import('./migrate.ts');return;}
   // Freeze the input; newly discovered links do not expand the corpus mid-run.
-  const roots=await sql<Root[]>`SELECT id,original_url,source_item_id,problem,theme_key,testimony_judgement FROM insight_demands WHERE source_kind='github_issue' ORDER BY id`;
+  const roots=await sql<Root[]>`SELECT id,original_url,source_item_id,problem,theme_key,created_at,testimony_judgement FROM insight_demands WHERE source_kind='github_issue' ORDER BY id`;
   const resume=process.argv.includes('--resume');
-  const pending=resume?await sql<Root[]>`SELECT id,original_url,source_item_id,problem,theme_key,testimony_judgement FROM insight_demands WHERE source_kind='github_issue' AND (coalesce(coverage->>'judgementComplete','false')<>'true' OR coalesce((coverage->>'judgementFailures')::int,0)>0) ORDER BY id`:roots;
+  const pending=resume?await sql<Root[]>`SELECT id,original_url,source_item_id,problem,theme_key,created_at,testimony_judgement FROM insight_demands WHERE source_kind='github_issue' AND (coalesce(coverage->>'judgementComplete','false')<>'true' OR coalesce((coverage->>'judgementFailures')::int,0)>0) ORDER BY id`:roots;
   await parallel(pending,scan,3);
   const all=await sql<{id:number;coverage:Record<string,unknown>|null}[]>`SELECT id,coverage FROM insight_demands WHERE source_kind='github_issue' ORDER BY id`;
   const summary={rootTotal:all.length,eligible:all.filter(r=>r.coverage?.eligible===true).length,complete:all.filter(r=>r.coverage?.complete===true).length,judgementComplete:all.filter(r=>r.coverage?.judgementComplete===true).length,coverageReadComplete:all.every(r=>r.coverage?.commentsRead===true),commentsRead:all.filter(r=>r.coverage?.commentsRead===true).length,noComments:all.filter(r=>r.coverage?.noComments===true).length,failures:all.filter(r=>r.coverage?.error).length,commentsChecked:all.reduce((s,r)=>s+Number(r.coverage?.commentsChecked ?? 0),0),qualifiedTestimony:all.reduce((s,r)=>s+Number(r.coverage?.accepted ?? 0),0)};
   mkdirSync('.data/phase5',{recursive:true,mode:0o700});
   writeFileSync('.data/phase5/coverage.json',JSON.stringify({summary,roots:all},null,2),{mode:0o600});
-  console.log(JSON.stringify(summary));if(!summary.coverageReadComplete || summary.failures) process.exitCode=1;
+  // A single root/model failure is content-level degradation.  It remains in
+  // coverage JSON for retry, while the pipeline continues to group, discover,
+  // gate and retrieve evidence for every other source.  Only an incomplete
+  // source read is fatal because it can hide an unpersisted page/comment.
+  console.log(JSON.stringify({ ...summary, runStatus: summary.coverageReadComplete ? (summary.failures ? "degraded" : "healthy") : "fatal_incomplete_read" }));
+  if (!summary.coverageReadComplete) process.exitCode=1;
 }
 try{await main();}finally{await closeDb();}

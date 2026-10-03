@@ -7,7 +7,7 @@ import { sha256 } from "@aihot/backend/lib/ids";
 import { judge } from "./phase4-common.ts";
 import { exactRelation } from "@aihot/backend/insights/claim-gate";
 
-type Claim = { id: number; claim: string; claimant: string; original_source: string; evidence: VerifiedEvidence[] | null; status: string; evidence_audit: Record<string, unknown> | null };
+type Claim = { id: number; claim: string; claimant: string; original_source: string; evidence: VerifiedEvidence[] | null; status: string; evidence_audit: Record<string, unknown> | null; observed_at: string; created_at: string };
 const Relation = z.object({ relation: z.string().optional(), verdict: z.string().optional(), judgment: z.string().optional(), confidence: z.string().optional(), quote: z.string().optional(), reason: z.string().optional() });
 function normalize(raw: z.infer<typeof Relation>) {
   const relation = exactRelation(raw.relation ?? raw.verdict ?? raw.judgment ?? "");
@@ -21,7 +21,7 @@ function queryIntents(claim: Claim): string[] {
   return [text, `${claim.claimant} ${text}`, `${text} benchmark results methodology`, "AI benchmark independent results"].filter((x, i, arr) => x.length >= 8 && arr.indexOf(x) === i).slice(0, 4);
 }
 async function main() {
-  const claims = await sql<Claim[]>`SELECT id, claim, claimant, original_source, evidence, status, evidence_audit FROM insight_claims WHERE strong_claim ORDER BY id`;
+  const claims = await sql<Claim[]>`SELECT id, claim, claimant, original_source, evidence, status, evidence_audit, observed_at, created_at FROM insight_claims WHERE strong_claim ORDER BY id`;
   let fetched = 0, deepRead = 0, judged = 0, supports = 0, conflicts = 0, queryExecuted = 0;
   for (const claim of claims) {
     const intents = queryIntents(claim);
@@ -59,8 +59,12 @@ async function main() {
     }
     const evidence = [...dedup.values()];
     const status = claimStatus(evidence);
+    const evidenceChanged = !sameJson(claim.evidence ?? [], evidence);
+    const checkedAt = new Date().toISOString();
+    const previousMaterialUpdate = typeof claim.evidence_audit?.lastMaterialUpdateAt === "string" ? claim.evidence_audit.lastMaterialUpdateAt : null;
     const audit = {
-      phase: 6, retrievalVersion: "v6-public-adapters", updatedAt: new Date().toISOString(), queryIntents: intents,
+      phase: 6, retrievalVersion: "v6-public-adapters", updatedAt: checkedAt, queryIntents: intents,
+      lifecycleStatus: "active", sourcePublishedAt: claim.observed_at, firstSeenAt: claim.created_at, lastCheckedAt: checkedAt, lastMaterialUpdateAt: evidenceChanged ? checkedAt : previousMaterialUpdate,
       queryGenerated: intents.length, queryExecuted: claimExecuted, searchStatus: retrieved.audits.some((x) => x.status === "success") ? "executed" : retrieved.audits.some((x) => x.status === "blocked") ? "blocked" : "no_result",
       adapters: retrieved.audits, candidates: retrieved.candidates.map((x) => ({ url: x.url, title: x.title, adapterId: x.adapterId, sourceDate: x.sourceDate })),
       fetched: retrieved.deepReads.filter((x) => x.status === "ok").map((x) => ({ url: x.canonicalUrl, retrievedAt: x.retrievedAt, contentHash: x.contentHash, excerpt: x.excerpt, fetchStatus: x.fetchStatus })),
@@ -68,7 +72,6 @@ async function main() {
       tierCounts: { A: 0, B: 0, C: retrieved.candidates.length, D: 0 }, noResult: retrieved.audits.filter((x) => x.status === "no_result").length, blocked: retrieved.audits.filter((x) => x.status === "blocked").length,
     };
     const missing = status === "未验证" ? `已执行 ${intents.length} 组检索并深读 ${claimDeepRead} 个页面，尚未找到可独立复现“${claim.claim.slice(0, 80)}”的公开测试条件、原始数据和结果。` : status === "部分支持" ? "已有直接材料，仍需第二个可核对相同指标和测试条件的独立来源。" : "";
-    const evidenceChanged = !sameJson(claim.evidence ?? [], evidence);
     const auditChanged = !sameJson(claim.evidence_audit ?? null, audit);
     if (evidenceChanged) await sql`UPDATE insight_claims SET evidence=${sql.json(evidence as never)}, evidence_audit=${sql.json(audit as never)}, status=${status}, missing_evidence=${missing}, evidence_updated_at=now(), relation_reviewed=true WHERE id=${claim.id}`;
     else if (auditChanged) await sql`UPDATE insight_claims SET evidence_audit=${sql.json(audit as never)}, status=${status}, missing_evidence=${missing}, relation_reviewed=true WHERE id=${claim.id}`;
