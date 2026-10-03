@@ -4,6 +4,7 @@ import { loadOr404 } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
 import { buildDateGroups, compareLatestDesc, formatShanghaiTime } from "../lib/date-groups";
 import { publicText } from "../lib/public-text";
+import { RadarCard } from "../components/RadarCard";
 
 type Sample = {
   id: number;
@@ -79,11 +80,8 @@ export default function DemandsPage() {
             <h2 id={`demands-${group.label}`} className="mb-3 flex items-center gap-2 text-[15px] font-bold text-ink"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{group.label}</h2>
             <div className="space-y-4">
               {group.items.map((theme) => (
-                <Link to={`/demands/${encodeURIComponent(theme.themeKey)}`} key={theme.themeKey} className="card block overflow-hidden transition-colors hover:border-accent/40">
-                  <div className="border-b border-line-soft px-5 py-4 sm:px-6">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[17px] font-bold text-ink">{demandTitle(theme)}</h3><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程</span></div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>{evidenceLabel(theme)} · {theme.independentRepoCount} 个仓库 · {theme.independentPlatformCount} 个来源平台 · 最近活跃：{formatShanghaiTime(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
+                <Link to={`/demands/${encodeURIComponent(theme.themeKey)}`} key={theme.themeKey} className="block transition-colors hover:[&>article]:border-accent/40">
+                  <RadarCard kind="真需求" status={evidenceLabel(theme)} observedAt={theme.latestAt} title={demandTitle(theme)} meta={<><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程 · <b className="num text-ink-2">{theme.independentPlatformCount}</b> 个来源平台</>} footer={<span>查看详情 →</span>} />
                 </Link>
               ))}
             </div>

@@ -4,6 +4,7 @@ import { loadOr404 } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
 import { publicText } from "../lib/public-text";
 import { buildDateGroups, formatShanghaiTime } from "../lib/date-groups";
+import { RadarCard } from "../components/RadarCard";
 
 type Signal = { kind: "demand" | "claim"; id: number; topicKey: string | null; topicLabel: string | null; title: string; detail: string; sourceUrl: string; actor: string; status: string | null; observedAt: string };
 type Data = { signals: Signal[]; total: number; topics: Array<{ key: string; label: string; count: number }>; generatedAt: string };
@@ -22,16 +23,7 @@ function SignalCard({ signal }: { signal: Signal }) {
   const title = publicText(signal.title, "");
   if (!title) return null;
   const detail = publicText(signal.detail, "");
-  return <article className="card px-5 py-4 sm:px-6">
-    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-4">
-      <span className={`rounded px-2 py-0.5 ${signal.kind === "demand" ? "bg-accent-softer text-accent" : "bg-hot-soft text-hot"}`}>{signal.kind === "demand" ? "真需求" : "牛皮账本"}</span>
-      {signal.status && <span className="rounded bg-bg-sunk px-2 py-0.5">{signal.status}</span>}
-      <time className="ml-auto" dateTime={signal.observedAt}>{formatShanghaiTime(signal.observedAt)}</time>
-    </div>
-    <h2 className="mt-2 text-[17px] font-semibold leading-relaxed text-ink">{title}</h2>
-    {detail && <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-ink-3">{detail}</p>}
-    <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-4"><span>{signal.kind === "demand" ? "真实用户反馈" : "公开主张"}</span><span>·</span><a href={signal.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:text-accent-ink">查看原文 ↗</a></div>
-  </article>;
+  return <RadarCard kind={signal.kind === "demand" ? "真需求" : "牛皮账本"} status={signal.status} observedAt={signal.observedAt} title={title} summary={detail ? <span className="line-clamp-2">{detail}</span> : undefined} meta={signal.kind === "demand" ? "真实用户反馈" : "公开主张"} footer={<a href={signal.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>} />;
 }
 
 export default function Home() {
