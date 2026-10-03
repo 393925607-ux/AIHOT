@@ -23,7 +23,7 @@ type Sample = {
   workaroundZh?: string | null;
 };
 type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; independentThreadCount: number; independentRepoCount: number; independentPlatformCount: number; demandState: "multi_user" | "single_signal"; latestAt: string; samples: Sample[] };
-type DemandResponse = { themes: Theme[]; totalSamples: number; totalThemes: number; offset: number; generatedAt: string };
+type DemandResponse = { themes: Theme[]; totalSamples: number; totalThemes: number; offset: number; sort: "latest" | "evidence"; generatedAt: string };
 
 function demandTitle(theme: Theme) {
   const direct = publicText(theme.themeTitle, "");
@@ -36,8 +36,8 @@ function demandTitle(theme: Theme) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url); const offset = Math.max(Number(url.searchParams.get("offset") ?? 0) || 0, 0);
-  return loadOr404<DemandResponse>(`/api/site/demands?limit=50&offset=${offset}`, { signal: request.signal });
+  const url = new URL(request.url); const offset = Math.max(Number(url.searchParams.get("offset") ?? 0) || 0, 0); const sort = url.searchParams.get("sort") === "evidence" ? "evidence" : "latest";
+  return loadOr404<DemandResponse>(`/api/site/demands?limit=50&offset=${offset}&sort=${sort}`, { signal: request.signal });
 }
 
 export function meta() {
@@ -59,6 +59,12 @@ export default function DemandsPage() {
         <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">真实用户需求</p>
         <h1 className="mt-1.5 text-[25px] font-bold tracking-[-0.01em] text-ink">真需求</h1>
         <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">真实用户现在到底在为什么具体问题折腾？按日期分组，每天内部按最新动态倒序展示。</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ink-4" aria-label="需求排序">
+          <span>排序：</span>
+          <Link className={`rounded-full px-2.5 py-1 ${data.sort === "latest" ? "bg-accent text-white" : "bg-bg-sunk hover:text-ink"}`} to="/demands?sort=latest">最新动态</Link>
+          <Link className={`rounded-full px-2.5 py-1 ${data.sort === "evidence" ? "bg-accent text-white" : "bg-bg-sunk hover:text-ink"}`} to="/demands?sort=evidence">证据更充分</Link>
+          {data.sort === "evidence" && <span>每天内部按独立用户数 → 独立线程数 → 来源平台数倒序</span>}
+        </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-4"><span className="rounded-full bg-accent-softer px-2.5 py-1"><b className="num text-ink-2">{data.totalSamples}</b> 条原始样本</span><span className="rounded-full bg-bg-sunk px-2.5 py-1"><b className="num text-ink-2">{data.themes.length}</b> 个具体问题</span></div>
       </header>
       <div className="space-y-7">
@@ -78,7 +84,7 @@ export default function DemandsPage() {
           </section>
         ))}
         {data.themes.length === 0 && <div className="card px-5 py-12 text-center text-[14px] text-ink-3">还没有需求样本，请运行采集任务后刷新。</div>}
-        {(data.offset > 0 || data.offset + data.themes.length < data.totalThemes) && <nav className="flex justify-center gap-3 pt-2 text-[13px]" aria-label="需求分页">{data.offset > 0 && <Link className="text-accent" to={`/demands?offset=${Math.max(data.offset - 50, 0)}`}>上一页</Link>}{data.offset + data.themes.length < data.totalThemes && <Link className="text-accent" to={`/demands?offset=${data.offset + 50}`}>下一页</Link>}</nav>}
+        {(data.offset > 0 || data.offset + data.themes.length < data.totalThemes) && <nav className="flex justify-center gap-3 pt-2 text-[13px]" aria-label="需求分页">{data.offset > 0 && <Link className="text-accent" to={`/demands?offset=${Math.max(data.offset - 50, 0)}&sort=${data.sort}`}>上一页</Link>}{data.offset + data.themes.length < data.totalThemes && <Link className="text-accent" to={`/demands?offset=${data.offset + 50}&sort=${data.sort}`}>下一页</Link>}</nav>}
       </div>
     </div>
   );

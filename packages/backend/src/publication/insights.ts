@@ -11,6 +11,7 @@ export type DemandSample = {
   lifecycleStatus?: RadarLifecycle; attribution?: RadarAttribution;
 };
 export type DemandTheme = ReturnType<typeof demandBreadth> & { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; latestAt: string; samples: DemandSample[]; lifecycleStatus: RadarLifecycle; attribution: RadarAttribution };
+export type DemandSort = "latest" | "evidence";
 export type ClaimEvidence = { kind: "support" | "conflict" | "related"; url: string; quote: string; source: string };
 export type Claim = {
   id: number; claim: string; claimant: string; claimType: "性能" | "成本" | "用户量" | "Benchmark" | "产品能力";
@@ -28,7 +29,7 @@ export type Signal = {
 type DemandRow = { theme_key: string; theme_title: string; latest_at: Date; samples: DemandSample[] };
 type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claimant_name: string | null; claimant_type: string | null; claimant_interest: string | null; claim_type: Claim["claimType"]; original_source: string; original_claim_url: string | null; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; created_at: Date; evidence_audit: Record<string, unknown> | null; claim_gate_judgement: Record<string, unknown> | null; topic_key: string | null; topic_label: string | null };
 
-async function readDemandThemes(q: string | null, limit: number, offset = 0, themeKey: string | null = null): Promise<DemandTheme[]> {
+async function readDemandThemes(q: string | null, limit: number, offset = 0, themeKey: string | null = null, sort: DemandSort = "latest"): Promise<DemandTheme[]> {
   const rows = await sql<DemandRow[]>`
     SELECT d.theme_key, max(d.theme_title) AS theme_title, max(d.observed_at) AS latest_at,
       json_agg(json_build_object('id', d.id, 'problem', d.problem, 'scenario', d.scenario, 'workaround', d.workaround,
@@ -48,19 +49,22 @@ async function readDemandThemes(q: string | null, limit: number, offset = 0, the
     return { themeKey: r.theme_key, themeTitle: r.theme_title, sampleCount: samples.length,
       sourceCount: breadth.independentThreadCount, ...breadth, latestAt: r.latest_at.toISOString(), samples,
       lifecycleStatus: samples[0]?.lifecycleStatus ?? "reported", attribution: samples[0]?.attribution ?? readAttribution(null) };
-  }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)).slice(offset, offset + limit);
+  }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt)
+    || (sort === "evidence" ? b.independentUserCount - a.independentUserCount || b.independentThreadCount - a.independentThreadCount || b.independentPlatformCount - a.independentPlatformCount : 0)
+    || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)).slice(offset, offset + limit);
 }
 
-export async function loadDemandThemes(opts: { q?: string | null; limit?: number; offset?: number } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; totalThemes: number; offset: number; generatedAt: string }> {
+export async function loadDemandThemes(opts: { q?: string | null; limit?: number; offset?: number; sort?: DemandSort } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; totalThemes: number; offset: number; sort: DemandSort; generatedAt: string }> {
   const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 100)}%` : null;
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const themes = await readDemandThemes(q, limit, offset);
+  const sort: DemandSort = opts.sort === "evidence" ? "evidence" : "latest";
+  const themes = await readDemandThemes(q, limit, offset, null, sort);
   const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
     AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})`;
   const [{ totalThemes }] = await sql<{ totalThemes: number }[]>`SELECT count(*)::int AS "totalThemes" FROM (SELECT d.theme_key FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
     AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q}) GROUP BY d.theme_key) x`;
-  return { themes, totalSamples: total, totalThemes, offset, generatedAt: new Date().toISOString() };
+  return { themes, totalSamples: total, totalThemes, offset, sort, generatedAt: new Date().toISOString() };
 }
 
 export async function loadClaims(opts: { q?: string | null; status?: string | null; limit?: number; offset?: number } = {}): Promise<{ claims: Claim[]; total: number; offset: number; generatedAt: string }> {
@@ -126,5 +130,5 @@ export async function loadTopicDetail(topicKey: string): Promise<{ topic: { key:
 }
 
 export async function loadDemandTheme(themeKey: string): Promise<DemandTheme | null> {
-  return (await readDemandThemes(null, 1, 0, themeKey))[0] ?? null;
+  return (await readDemandThemes(null, 1, 0, themeKey, "latest"))[0] ?? null;
 }

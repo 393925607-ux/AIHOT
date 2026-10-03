@@ -39,6 +39,14 @@ function normalizeTechnicalPhrases(value: string): string {
   return TECHNICAL_PHRASES.reduce((text, [source, target]) => text.replaceAll(source, target), value);
 }
 
+/**
+ * 把内部判定提示词里偏生硬的“本人”换成普通读者能直接理解的说法。
+ * 这里只处理一个明确的中文术语，不把 helper 变成运行时翻译器；产品名和英文技术词仍按原样保留。
+ */
+function normalizeReaderFacingTerms(value: string): string {
+  return value.replaceAll("本人", "用户");
+}
+
 function isReaderFacingChinese(value: string): boolean {
   if (!/[\u3400-\u9fff]/.test(value)) return false;
   const words = value.match(/[A-Za-z][A-Za-z0-9_.@/-]*/g) ?? [];
@@ -52,7 +60,7 @@ export function publicText(value: string | null | undefined, fallback: string): 
   if (exact) return exact;
   const prefix = PREFIX_TRANSLATIONS.find(([source]) => text.startsWith(source));
   if (prefix) return prefix[1];
-  const normalized = normalizeTechnicalPhrases(text);
+  const normalized = normalizeReaderFacingTerms(normalizeTechnicalPhrases(text));
   return isReaderFacingChinese(normalized) ? normalized : fallback;
 }
 

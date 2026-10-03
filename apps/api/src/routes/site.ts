@@ -23,7 +23,7 @@ import { listReports, loadReport, reportNavigation, loadReportNavigation, loadRe
 import { loadSiteCodexResetPage, loadSiteCodexResetDay } from "@aihot/backend/publication/monitor";
 import { codexResetVersion } from "@aihot/backend/monitor/read";
 import { cached } from "@aihot/backend/lib/cache";
-import { loadClaim, loadClaims, loadDemandThemes, loadDemandTheme, loadSignals, loadTopicDetail } from "@aihot/backend/publication/insights";
+import { loadClaim, loadClaims, loadDemandThemes, loadDemandTheme, loadSignals, loadTopicDetail, type DemandSort } from "@aihot/backend/publication/insights";
 import { looseQuery, sendJsonWithEtag, sendProblem } from "../http/respond.ts";
 
 type Handler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -167,7 +167,8 @@ export function registerSite(app: FastifyInstance) {
 
   app.get("/api/site/demands", siteHandler(async (req, reply) => {
     const q = looseQuery(req);
-    const data = await loadDemandThemes({ q: q.q ?? null, limit: Number(q.limit) || 50, offset: Math.max(Number(q.offset) || 0, 0) });
+    const sort: DemandSort = q.sort === "evidence" ? "evidence" : "latest";
+    const data = await loadDemandThemes({ q: q.q ?? null, limit: Number(q.limit) || 50, offset: Math.max(Number(q.offset) || 0, 0), sort });
     return sendJsonWithEtag(req, reply, data, { etagPrefix: "demands", cacheControl: "public, max-age=30, s-maxage=60" });
   }));
 
