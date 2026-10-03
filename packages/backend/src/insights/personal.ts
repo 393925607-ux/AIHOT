@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 /** The only labels that can leave the private Inbox classifier. */
 export type InboxClassification = "Demand" | "Claim" | "Evidence" | "Noise" | "Needs Review";
+export type InboxGatePath = "demand_gate" | "claim_gate" | "evidence_gate" | "noise" | "needs_review";
 
 export type OwnTestMetadata = {
   vendor: string | null;
@@ -47,6 +48,9 @@ export type PrivateInboxRecord = {
   user_supplied: boolean;
   independent: false | null;
   ownTestMetadata: OwnTestMetadata | null;
+  gatePath: InboxGatePath;
+  gateDecision: "needs_review" | "noise";
+  dedupeStatus: "pending" | "not_applicable";
 };
 
 const HASH = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -153,6 +157,8 @@ export function buildPrivateRecord(input: { sourceUrl: string | null; textFile: 
   const ownTest = input.ownTest === true;
   const ownTestMetadata = ownTest ? parseOwnTest(input.text) : null;
   const classify = classifyPrivateInput({ hint: input.hint, text: input.text, ownTest, ownTestMetadata });
+  const gatePath: InboxGatePath = classify === "Demand" ? "demand_gate" : classify === "Claim" ? "claim_gate" : classify === "Evidence" ? "evidence_gate" : classify === "Noise" ? "noise" : "needs_review";
+  const gateDecision = classify === "Noise" ? "noise" : "needs_review";
   return {
     privacy: "private",
     status: "pending",
@@ -170,5 +176,8 @@ export function buildPrivateRecord(input: { sourceUrl: string | null; textFile: 
     user_supplied: ownTest,
     independent: ownTest ? false : null,
     ownTestMetadata,
+    gatePath,
+    gateDecision,
+    dedupeStatus: classify === "Noise" ? "not_applicable" : "pending",
   };
 }

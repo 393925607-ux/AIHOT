@@ -26,6 +26,6 @@ async function main() {
     appendFileSync(inbox, `${JSON.stringify(record)}\n`, { mode: 0o600 });
     chmodSync(inbox, 0o600);
   }
-  console.log(JSON.stringify({ ok: true, mode: apply ? "applied_private" : "dry_run", privacy: "private", classify: record.classify, reviewStatus: record.reviewStatus, ownTest, contentHash: record.contentHash, textLength: record.textLength }));
+  console.log(JSON.stringify({ ok: true, mode: apply ? "applied_private" : "dry_run", privacy: "private", classify: record.classify, gatePath: record.gatePath, gateDecision: record.gateDecision, dedupeStatus: record.dedupeStatus, reviewStatus: record.reviewStatus, ownTest, contentHash: record.contentHash, textLength: record.textLength }));
 }
 try { await main(); } catch (error) { console.error(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : "inbox_error" })); process.exitCode = 1; }

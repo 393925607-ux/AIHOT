@@ -6,11 +6,13 @@ import { buildPrivateRecord, parseOwnTest } from "@aihot/backend/insights/person
 
 test("private Inbox classifies explicit labels and keeps uncertain input for review", () => {
   assert.equal(buildPrivateRecord({ sourceUrl: null, textFile: null, hint: "demand", text: "具体需求描述" }).classify, "Demand");
+  assert.equal(buildPrivateRecord({ sourceUrl: null, textFile: null, hint: "demand", text: "具体需求描述" }).gatePath, "demand_gate");
   assert.equal(buildPrivateRecord({ sourceUrl: null, textFile: null, hint: "claim", text: "明确主张" }).classify, "Claim");
   assert.equal(buildPrivateRecord({ sourceUrl: null, textFile: null, hint: "noise", text: "噪声" }).classify, "Noise");
   const uncertain = buildPrivateRecord({ sourceUrl: null, textFile: null, hint: null, text: "没有可判断类型的内容" });
   assert.equal(uncertain.classify, "Needs Review");
   assert.equal(uncertain.reviewStatus, "needs_review");
+  assert.equal(uncertain.gateDecision, "needs_review");
 });
 
 test("own-test JSON and Markdown are parsed as user supplied, non-independent evidence", () => {
@@ -28,6 +30,8 @@ test("own-test JSON and Markdown are parsed as user supplied, non-independent ev
   const markdown = "Vendor: Example\nModel: Model 2\nTask: 任务\nMetric: 吞吐\nValue: 42\nLimitations: 仅供参考";
   const record = buildPrivateRecord({ sourceUrl: null, textFile: "result.md", hint: "own-test", text: markdown, ownTest: true });
   assert.equal(record.classify, "Evidence");
+  assert.equal(record.gatePath, "evidence_gate");
+  assert.equal(record.gateDecision, "needs_review");
   assert.equal(record.reviewStatus, "needs_review");
   assert.equal(record.own_test, true);
   assert.equal(record.user_supplied, true);
