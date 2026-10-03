@@ -8,6 +8,7 @@ import { publicCanonical } from "@aihot/backend/insights/validity";
 import { sha256 } from "@aihot/backend/lib/ids";
 import { StageASchema, extractionErrorClass, normalizeStageA, type StageAItem } from "@aihot/backend/insights/claim-extraction";
 import { decideClaimGate, type GateModel, type ClaimReasonCode } from "@aihot/backend/insights/claim-gate";
+import { fairRoundRobin } from "@aihot/backend/insights/discovery-queue";
 import { judge, safeError } from "./phase4-common.ts";
 
 const FEEDS = [["DeepMind", "https://deepmind.google/blog/rss.xml"], ["NVIDIA", "https://blogs.nvidia.com/feed/"], ["Microsoft Research", "https://www.microsoft.com/en-us/research/feed/"], ["Mistral", "https://mistral.ai/rss.xml"], ["Google Research", "https://research.google/blog/rss/"], ["Hugging Face", "https://huggingface.co/blog/feed.xml"]] as const;
@@ -53,7 +54,18 @@ async function discoverPages(cutoff: number): Promise<Page[]> {
   }
   // Keep the unattended daily run bounded; the same script can be run manually
   // with cached pages when a wider audit is needed.
-  return pages.slice(0, 4);
+  for (const page of pages) await sql`INSERT INTO radar_discovery_queue(stream,source_family,source_item_id,source_url,payload,priority,content_hash)
+    VALUES('claim_page',${page.source},${publicCanonical(page.url)},${publicCanonical(page.url)},${sql.json(page as never)},${page.source === 'NVIDIA' ? 80 : 50},md5(${`${page.url}|${page.publishedAt ?? ''}`}))
+    ON CONFLICT(stream,source_item_id) DO UPDATE SET payload=EXCLUDED.payload,source_url=EXCLUDED.source_url,updated_at=now(),
+      status=CASE WHEN radar_discovery_queue.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN 'pending' ELSE radar_discovery_queue.status END,
+      content_hash=EXCLUDED.content_hash`;
+  const queued = await sql.begin(async (tx) => {
+    await tx`UPDATE radar_discovery_queue SET status='pending',updated_at=now() WHERE stream='claim_page' AND status='running' AND lease_until < now()`;
+    const rows = await tx<{ source_family: string; source_item_id: string; payload: Page }[]>`SELECT source_family,source_item_id,payload FROM radar_discovery_queue WHERE stream='claim_page' AND status IN ('pending','retryable') AND available_at <= now() ORDER BY priority DESC, first_seen_at, id LIMIT 12`;
+    if (rows.length) await tx`UPDATE radar_discovery_queue SET status='running',attempts=attempts+1,lease_until=now()+interval '30 minutes',updated_at=now() WHERE stream='claim_page' AND source_item_id IN ${tx(rows.map((x) => x.source_item_id))}`;
+    return rows;
+  });
+  return fairRoundRobin(queued.map((x) => ({ sourceFamily: x.source_family, payload: x.payload })), 4).map((x) => x.payload);
 }
 
 function cachedPages(): Page[] {
@@ -76,7 +88,7 @@ async function main() {
     seenPages.add(canonical);
     let body = page.body;
     if (!body && !cached) {
-      try { const fetched = await guardedFetch(page.url, { timeoutMs: 15_000, maxBytes: 1_200_000 }); if (fetched.status !== 200) throw new Error(`http_${fetched.status}`); body = clean(fetched.text()); funnel.pages_fetch_ok++; } catch (error) { funnel.pages_fetch_failed++; errors[extractionErrorClass(error)] = (errors[extractionErrorClass(error)] ?? 0) + 1; continue; }
+      try { const fetched = await guardedFetch(page.url, { timeoutMs: 15_000, maxBytes: 1_200_000 }); if (fetched.status !== 200) throw new Error(`http_${fetched.status}`); body = clean(fetched.text()); funnel.pages_fetch_ok++; } catch (error) { funnel.pages_fetch_failed++; errors[extractionErrorClass(error)] = (errors[extractionErrorClass(error)] ?? 0) + 1; await sql`UPDATE radar_discovery_queue SET status='retryable',last_error=${safeError(error)},updated_at=now() WHERE stream='claim_page' AND source_item_id=${canonical}`; continue; }
     } else if (body) funnel.pages_fetch_ok++;
     if (body.length < 300) continue;
     funnel.pages_with_enough_text++;
@@ -88,7 +100,7 @@ async function main() {
       extracted = normalizeStageA(result.data);
       funnel.extract_success_pages += extracted.length ? 1 : 0;
       funnel.extract_zero_pages += extracted.length ? 0 : 1;
-    } catch (error) { funnel.extract_model_error_pages++; errors[extractionErrorClass(error)] = (errors[extractionErrorClass(error)] ?? 0) + 1; continue; }
+    } catch (error) { funnel.extract_model_error_pages++; errors[extractionErrorClass(error)] = (errors[extractionErrorClass(error)] ?? 0) + 1; await sql`UPDATE radar_discovery_queue SET status='retryable',last_error=${safeError(error)},updated_at=now() WHERE stream='claim_page' AND source_item_id=${canonical}`; continue; }
     funnel.candidate_statements += extracted.length;
     for (let candidateIndex = 0; candidateIndex < extracted.length; candidateIndex++) {
       const candidate = extracted[candidateIndex]!;
@@ -126,6 +138,8 @@ async function main() {
       }
       audits.push({ source: page.source, title: page.title, url: canonical, candidate, stageB, decision, claimZhReady, inserted, error: errorText });
     }
+    const pageNeedsRetry = audits.some((item) => item.url === canonical && (item.error || item.decision.decision === "model_error"));
+    await sql`UPDATE radar_discovery_queue SET status=${pageNeedsRetry ? "retryable" : "done"},last_checked_at=now(),updated_at=now() WHERE stream='claim_page' AND source_item_id=${canonical}`;
   }
   writeFileSync(".data/dual-recovery/claim-discovery-audit.json", JSON.stringify({ cached, funnel, errors, audits }, null, 2), { mode: 0o600 });
   checkpoint({ ...funnel, errors, cached, completedAt: new Date().toISOString() });

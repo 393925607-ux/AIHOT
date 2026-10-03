@@ -41,7 +41,9 @@ function dataItems(data: unknown): Array<Record<string, any>> {
     if (!item || typeof item !== "object") return [];
     const x = item as Record<string, any>;
     const id = Number(x.id);
-    return Number.isInteger(id) ? [{ ...x, id, atomicEnough: x.atomicEnough ?? x.atomic_enough, reasonCode: x.reasonCode ?? null, reasonZh: x.reasonZh ?? null }] : [];
+    if (!Number.isInteger(id)) return [];
+    const schemaError = typeof x.eligible !== "boolean" || (x.claimantType != null && !CLAIMANT_TYPES.includes(x.claimantType)) || (x.claimantInterest != null && !INTERESTS.includes(x.claimantInterest)) || (x.claimType != null && !CLAIM_TYPES.includes(x.claimType));
+    return [{ ...x, id, atomicEnough: x.atomicEnough ?? x.atomic_enough, reasonCode: x.reasonCode ?? null, reasonZh: x.reasonZh ?? null, schemaError }];
   });
 }
 
@@ -80,12 +82,14 @@ async function main() {
     const batch = claims.slice(i, i + 6);
     try {
       const result = await judgeWithRetry(batch, i);
-      for (const item of dataItems(result.data)) if (batch.some((c) => c.id === item.id)) decisions.set(item.id, item);
+      for (const item of dataItems(result.data)) if (batch.some((c) => c.id === item.id)) {
+        if (item.schemaError) modelErrors.push({ id: item.id, error: "schema_error" }); else decisions.set(item.id, item);
+      }
       for (const claim of batch) if (!decisions.has(claim.id)) {
         try {
           const single = await judgeOneWithRetry(claim);
           const [item] = dataItems(single.data);
-          if (item) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: "missing_single_judgement" });
+          if (item && !item.schemaError) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: item?.schemaError ? "schema_error" : "missing_single_judgement" });
         } catch (singleError) { modelErrors.push({ id: claim.id, error: safeError(singleError) }); }
       }
     } catch (error) {
@@ -93,7 +97,7 @@ async function main() {
         try {
           const single = await judgeOneWithRetry(claim);
           const [item] = dataItems(single.data);
-          if (item) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: "missing_single_judgement" });
+          if (item && !item.schemaError) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: item?.schemaError ? "schema_error" : "missing_single_judgement" });
         } catch (singleError) { modelErrors.push({ id: claim.id, error: safeError(singleError) }); }
       }
     }

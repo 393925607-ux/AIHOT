@@ -31,8 +31,7 @@ ${x.description}`, story_title: x.title, created_at: x.pubDate || new Date().toI
 }
 
 async function main() {
-  const wanted = new Set(['49613950','42935476','47402197','49876610','48149158','48144786','49288396','48967430','47310039','47033735','47938981','49806331']);
-  const hn = (await Promise.all(QUERIES.map(search))).flat().filter(h => wanted.has(h.objectID));
+  const hn = (await Promise.all(QUERIES.map(search))).flat().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, 12);
   const community = await searchCommunity().catch(() => []);
   const hits = [...new Map([...hn, ...community].map(h => [h.objectID, h])).values()];
   const roots = await sql<Root[]>`SELECT id,theme_key,theme_title,problem_zh,scenario_zh,workaround_zh FROM insight_demands WHERE source_kind='github_issue' AND is_testimony ORDER BY id`;

@@ -23,7 +23,7 @@ type Sample = {
   workaroundZh?: string | null;
 };
 type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; independentThreadCount: number; independentRepoCount: number; independentPlatformCount: number; demandState: "multi_user" | "single_signal"; latestAt: string; samples: Sample[] };
-type DemandResponse = { themes: Theme[]; totalSamples: number; generatedAt: string };
+type DemandResponse = { themes: Theme[]; totalSamples: number; totalThemes: number; offset: number; generatedAt: string };
 
 function demandTitle(theme: Theme) {
   const direct = publicText(theme.themeTitle, "");
@@ -36,7 +36,8 @@ function demandTitle(theme: Theme) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return loadOr404<DemandResponse>("/api/site/demands?limit=50", { signal: request.signal });
+  const url = new URL(request.url); const offset = Math.max(Number(url.searchParams.get("offset") ?? 0) || 0, 0);
+  return loadOr404<DemandResponse>(`/api/site/demands?limit=50&offset=${offset}`, { signal: request.signal });
 }
 
 export function meta() {
@@ -77,6 +78,7 @@ export default function DemandsPage() {
           </section>
         ))}
         {data.themes.length === 0 && <div className="card px-5 py-12 text-center text-[14px] text-ink-3">还没有需求样本，请运行采集任务后刷新。</div>}
+        {(data.offset > 0 || data.offset + data.themes.length < data.totalThemes) && <nav className="flex justify-center gap-3 pt-2 text-[13px]" aria-label="需求分页">{data.offset > 0 && <Link className="text-accent" to={`/demands?offset=${Math.max(data.offset - 50, 0)}`}>上一页</Link>}{data.offset + data.themes.length < data.totalThemes && <Link className="text-accent" to={`/demands?offset=${data.offset + 50}`}>下一页</Link>}</nav>}
       </div>
     </div>
   );

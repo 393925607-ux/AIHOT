@@ -167,13 +167,13 @@ export function registerSite(app: FastifyInstance) {
 
   app.get("/api/site/demands", siteHandler(async (req, reply) => {
     const q = looseQuery(req);
-    const data = await loadDemandThemes({ q: q.q ?? null, limit: Number(q.limit) || 50 });
+    const data = await loadDemandThemes({ q: q.q ?? null, limit: Number(q.limit) || 50, offset: Math.max(Number(q.offset) || 0, 0) });
     return sendJsonWithEtag(req, reply, data, { etagPrefix: "demands", cacheControl: "public, max-age=30, s-maxage=60" });
   }));
 
   app.get("/api/site/claims", siteHandler(async (req, reply) => {
     const q = looseQuery(req);
-    const data = await loadClaims({ q: q.q ?? null, status: q.status ?? null, limit: Number(q.limit) || 100 });
+    const data = await loadClaims({ q: q.q ?? null, status: q.status ?? null, limit: Number(q.limit) || 100, offset: Math.max(Number(q.offset) || 0, 0) });
     return sendJsonWithEtag(req, reply, data, { etagPrefix: "claims", cacheControl: "public, max-age=30, s-maxage=60" });
   }));
 

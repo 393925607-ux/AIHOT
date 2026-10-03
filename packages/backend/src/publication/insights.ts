@@ -24,7 +24,7 @@ export type Signal = {
 type DemandRow = { theme_key: string; theme_title: string; latest_at: Date; samples: DemandSample[] };
 type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claimant_name: string | null; claimant_type: string | null; claimant_interest: string | null; claim_type: Claim["claimType"]; original_source: string; original_claim_url: string | null; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; topic_key: string | null; topic_label: string | null };
 
-async function readDemandThemes(q: string | null, limit: number, themeKey: string | null = null): Promise<DemandTheme[]> {
+async function readDemandThemes(q: string | null, limit: number, offset = 0, themeKey: string | null = null): Promise<DemandTheme[]> {
   const rows = await sql<DemandRow[]>`
     SELECT d.theme_key, max(d.theme_title) AS theme_title, max(d.observed_at) AS latest_at,
       json_agg(json_build_object('id', d.id, 'problem', d.problem, 'scenario', d.scenario, 'workaround', d.workaround,
@@ -41,28 +41,33 @@ async function readDemandThemes(q: string | null, limit: number, themeKey: strin
   return rows.map(r => {
     const breadth = demandBreadth(r.samples);
     return { themeKey: r.theme_key, themeTitle: r.theme_title, sampleCount: r.samples.length,
-      sourceCount: breadth.independentThreadCount, ...breadth, latestAt: r.latest_at.toISOString(), samples: r.samples };
-  }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)).slice(0, limit);
+      sourceCount: breadth.independentThreadCount, ...breadth, latestAt: r.latest_at.toISOString(), samples: r.samples.map((sample) => ({ ...sample, sourceUser: null })) };
+  }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)).slice(offset, offset + limit);
 }
 
-export async function loadDemandThemes(opts: { q?: string | null; limit?: number } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; generatedAt: string }> {
+export async function loadDemandThemes(opts: { q?: string | null; limit?: number; offset?: number } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; totalThemes: number; offset: number; generatedAt: string }> {
   const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 100)}%` : null;
-  const themes = await readDemandThemes(q, Math.min(Math.max(opts.limit ?? 50, 1), 100));
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const themes = await readDemandThemes(q, limit, offset);
   const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
     AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})`;
-  return { themes, totalSamples: total, generatedAt: new Date().toISOString() };
+  const [{ totalThemes }] = await sql<{ totalThemes: number }[]>`SELECT count(*)::int AS "totalThemes" FROM (SELECT d.theme_key FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
+    AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q}) GROUP BY d.theme_key) x`;
+  return { themes, totalSamples: total, totalThemes, offset, generatedAt: new Date().toISOString() };
 }
 
-export async function loadClaims(opts: { q?: string | null; status?: string | null; limit?: number } = {}): Promise<{ claims: Claim[]; total: number; generatedAt: string }> {
+export async function loadClaims(opts: { q?: string | null; status?: string | null; limit?: number; offset?: number } = {}): Promise<{ claims: Claim[]; total: number; offset: number; generatedAt: string }> {
   const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 100)}%` : null;
   const status = opts.status && ["未验证", "部分支持", "有较强支持", "存在冲突证据"].includes(opts.status) ? opts.status : null;
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
   const rows = await sql<ClaimRow[]>`
     SELECT c.id, c.claim, c.claim_zh, c.claimant, c.claimant_name, c.claimant_type, c.claimant_interest, c.claim_type, c.original_source, c.original_claim_url, c.evidence, c.status, c.missing_evidence, c.observed_at, c.topic_key, c.topic_label
     FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})
-    ORDER BY c.observed_at DESC, c.id DESC LIMIT ${limit}`;
+    ORDER BY c.observed_at DESC, c.id DESC LIMIT ${limit} OFFSET ${offset}`;
   const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${status}::text IS NULL OR c.status = ${status})`;
-  return { claims: rows.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimantName: r.claimant_name, claimantType: r.claimant_type, claimantInterest: r.claimant_interest, claimType: r.claim_type, originalSource: r.original_claim_url ?? r.original_source, originalClaimUrl: r.original_claim_url, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })), total, generatedAt: new Date().toISOString() };
+  return { claims: rows.map((r) => ({ id: r.id, claim: r.claim, claimZh: r.claim_zh, claimant: r.claimant, claimantName: r.claimant_name, claimantType: r.claimant_type, claimantInterest: r.claimant_interest, claimType: r.claim_type, originalSource: r.original_claim_url ?? r.original_source, originalClaimUrl: r.original_claim_url, evidence: r.evidence ?? [], status: r.status, missingEvidence: r.missing_evidence, observedAt: r.observed_at.toISOString(), topicKey: r.topic_key, topicLabel: r.topic_label, supportCount: (r.evidence ?? []).filter((x) => x.kind === "support").length, conflictCount: (r.evidence ?? []).filter((x) => x.kind === "conflict").length, relatedCount: (r.evidence ?? []).filter((x) => x.kind === "related").length })), total, offset, generatedAt: new Date().toISOString() };
 }
 
 export async function loadClaim(id: number): Promise<Claim | null> {
@@ -78,7 +83,7 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
   const demands = type === "claim" ? [] : await sql<Signal[]>`
     SELECT 'demand' AS kind, d.id, d.topic_key AS "topicKey", d.topic_label AS "topicLabel", coalesce(d.problem_zh, d.problem) AS title,
            nullif(CASE WHEN coalesce(d.scenario_zh, d.scenario) ~ '问题是什么|日常编码或自动化任务|未说明具体复现' THEN '' ELSE coalesce(d.scenario_zh, d.scenario) END || CASE WHEN coalesce(d.workaround_zh, d.workaround) <> '' AND coalesce(d.workaround_zh, d.workaround) !~ '暂未发现明确临时解决办法|原文未明确' THEN '；临时办法：' || coalesce(d.workaround_zh, d.workaround) ELSE '' END, '') AS detail,
-           d.original_url AS "sourceUrl", coalesce(d.source_user, d.source_name) AS actor, NULL::text AS status, d.observed_at AS "observedAt"
+           d.original_url AS "sourceUrl", d.source_name AS actor, NULL::text AS status, d.observed_at AS "observedAt"
     FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment' AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q}) AND (${topic}::text IS NULL OR d.topic_key = ${topic})
     ORDER BY d.observed_at DESC, d.id DESC LIMIT ${limit}`;
   const claims = type === "demand" ? [] : await sql<Signal[]>`
@@ -100,7 +105,7 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
 
 export async function loadTopicDetail(topicKey: string): Promise<{ topic: { key: string; label: string }; demands: DemandSample[]; claims: Claim[] } | null> {
   const [demands, claims] = await Promise.all([
-    sql<DemandSample[]>`SELECT id, problem, scenario, workaround, evidence, original_url AS "originalUrl", source_name AS "sourceName", source_user AS "sourceUser", source_kind AS "sourceKind", observed_at AS "observedAt", topic_key AS "topicKey", topic_label AS "topicLabel", problem_zh AS "problemZh", scenario_zh AS "scenarioZh", workaround_zh AS "workaroundZh" FROM insight_demands WHERE is_testimony AND topic_key = ${topicKey} ORDER BY observed_at DESC, id DESC`,
+    sql<DemandSample[]>`SELECT id, problem, scenario, workaround, evidence, original_url AS "originalUrl", source_name AS "sourceName", NULL::text AS "sourceUser", source_kind AS "sourceKind", observed_at AS "observedAt", topic_key AS "topicKey", topic_label AS "topicLabel", problem_zh AS "problemZh", scenario_zh AS "scenarioZh", workaround_zh AS "workaroundZh" FROM insight_demands WHERE is_testimony AND topic_key = ${topicKey} ORDER BY observed_at DESC, id DESC`,
     sql<ClaimRow[]>`SELECT id, claim, claim_zh, claimant, claimant_name, claimant_type, claimant_interest, claim_type, original_source, original_claim_url, evidence, status, missing_evidence, observed_at, topic_key, topic_label FROM insight_claims WHERE strong_claim AND topic_key = ${topicKey} ORDER BY observed_at DESC, id DESC`,
   ]);
   if (!demands.length && !claims.length) return null;
@@ -109,5 +114,5 @@ export async function loadTopicDetail(topicKey: string): Promise<{ topic: { key:
 }
 
 export async function loadDemandTheme(themeKey: string): Promise<DemandTheme | null> {
-  return (await readDemandThemes(null, 1, themeKey))[0] ?? null;
+  return (await readDemandThemes(null, 1, 0, themeKey))[0] ?? null;
 }

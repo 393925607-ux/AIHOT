@@ -49,7 +49,8 @@ async function main() {
   const claims = await sql<Claim[]>`SELECT id, claim, claimant, original_source, evidence, status FROM insight_claims WHERE strong_claim ORDER BY id`;
   let judged = 0, fetched = 0, supports = 0, conflicts = 0;
   for (const claim of claims) {
-    const got = await Promise.all((candidates[claim.id] ?? []).map(fetchCandidate));
+    const claimCandidates = candidates[claim.id] ?? [{ url: claim.original_source, label: "原始主张页面", independence: "same_source" as const, tier: "A" as const }];
+    const got = await Promise.all(claimCandidates.map(fetchCandidate));
     fetched += got.filter(x => x.fetchStatus === "ok").length;
     const audit: Record<string, unknown> = { phase: 5, searchedAt: new Date().toISOString(), candidates: got.map(x => ({ url: x.url, label: x.label, domain: domain(x.url), fetchStatus: x.fetchStatus, independence: x.independence, tier: x.tier })) };
     const additions: VerifiedEvidence[] = [];
@@ -87,6 +88,7 @@ async function main() {
   }
   const partial = fetched > 0 && judged < fetched;
   console.log(JSON.stringify({ ok: !partial, claims: claims.length, fetched, judged, independentSupports: supports, independentConflicts: conflicts, partial }));
+  if (partial) process.exitCode = 1;
   // A single web/LLM candidate may be unavailable; keep the fetched audit and
   // let the next locked timer run resume the same claim instead of failing the
   // whole content pipeline.

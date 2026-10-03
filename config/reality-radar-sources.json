@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-03",
+  "coreVendors": [
+    { "vendor": "OpenAI", "affectedProducts": ["Codex", "ChatGPT"], "sourcePaths": ["GitHub Issues", "OpenAI Community RSS", "Hacker News"], "status": "ACTIVE", "evidence": "live DB source_kind and timer run" },
+    { "vendor": "Anthropic", "affectedProducts": ["Claude Code", "Claude Desktop"], "sourcePaths": ["GitHub Issues", "Stack Exchange"], "status": "CONNECTED", "evidence": "live user-source paths; official vendor path not separately active" },
+    { "vendor": "Google", "affectedProducts": ["Gemini"], "sourcePaths": ["DeepMind official RSS", "GitHub/Stack Exchange probe"], "status": "PROBED_READABLE", "evidence": "claim discovery official feed; no separate Demand family yet" },
+    { "vendor": "xAI", "affectedProducts": ["Grok"], "sourcePaths": ["public claim/evidence links"], "status": "NOT_PROBED", "evidence": "no stable user adapter connected in this run" },
+    { "vendor": "Microsoft/GitHub", "affectedProducts": ["GitHub Copilot", "Windows ChatGPT"], "sourcePaths": ["GitHub Issues", "Stack Exchange"], "status": "CONNECTED", "evidence": "live user-source paths; vendor-specific matrix pending" },
+    { "vendor": "DeepSeek", "affectedProducts": ["DeepSeek"], "sourcePaths": ["public claim/evidence links"], "status": "NOT_PROBED", "evidence": "no stable user adapter connected in this run" },
+    { "vendor": "Alibaba", "affectedProducts": ["Qwen"], "sourcePaths": ["official/secondary Claim URLs"], "status": "PROBED_READABLE", "evidence": "Claim source and original URL review" }
+  ],
+  "sourceFamilies": [
+    { "family": "github_issues_comments", "status": "ACTIVE" },
+    { "family": "github_discussions", "status": "ACTIVE" },
+    { "family": "vendor_forum", "status": "ACTIVE" },
+    { "family": "hacker_news", "status": "ACTIVE" },
+    { "family": "stack_exchange", "status": "ACTIVE" },
+    { "family": "community_forum", "status": "ACTIVE" },
+    { "family": "reddit", "status": "BLOCKED" }
+  ]
+}
