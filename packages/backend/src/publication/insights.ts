@@ -1,6 +1,7 @@
 import { sql } from "../db.ts";
 import { demandBreadth } from "../insights/breadth.ts";
 import { readAttribution, readLifecycle, type RadarAttribution, type RadarLifecycle } from "../insights/metadata.ts";
+import { beijingDate } from "@aihot/contracts/time";
 
 export type DemandSample = {
   id: number; problem: string; scenario: string; workaround: string; evidence: string;
@@ -29,6 +30,30 @@ export type Signal = {
 type DemandRow = { theme_key: string; theme_title: string; latest_at: Date; samples: DemandSample[] };
 type ClaimRow = { id: number; claim: string; claim_zh: string | null; claimant: string; claimant_name: string | null; claimant_type: string | null; claimant_interest: string | null; claim_type: Claim["claimType"]; original_source: string; original_claim_url: string | null; evidence: ClaimEvidence[]; status: Claim["status"]; missing_evidence: string; observed_at: Date; created_at: Date; evidence_audit: Record<string, unknown> | null; claim_gate_judgement: Record<string, unknown> | null; topic_key: string | null; topic_label: string | null };
 
+/**
+ * Sort demand themes by Shanghai calendar day before applying the selected
+ * within-day order. This keeps pagination deterministic and makes an evidence
+ * sort comparable to the date groups shown by the web client.
+ */
+export type DemandThemeSortInput = Pick<DemandTheme, "themeKey" | "latestAt" | "independentUserCount" | "independentThreadCount" | "independentPlatformCount">;
+
+export function sortDemandThemes<T extends DemandThemeSortInput>(themes: T[], sort: DemandSort): T[] {
+  return [...themes].sort((a, b) => {
+    const dayOrder = beijingDate(b.latestAt).localeCompare(beijingDate(a.latestAt));
+    if (dayOrder) return dayOrder;
+    if (sort === "evidence") {
+      return b.independentUserCount - a.independentUserCount
+        || b.independentThreadCount - a.independentThreadCount
+        || b.independentPlatformCount - a.independentPlatformCount
+        || Date.parse(b.latestAt) - Date.parse(a.latestAt)
+        || a.themeKey.localeCompare(b.themeKey);
+    }
+    return Date.parse(b.latestAt) - Date.parse(a.latestAt)
+      || b.independentUserCount - a.independentUserCount
+      || a.themeKey.localeCompare(b.themeKey);
+  });
+}
+
 async function readDemandThemes(q: string | null, limit: number, offset = 0, themeKey: string | null = null, sort: DemandSort = "latest"): Promise<DemandTheme[]> {
   const rows = await sql<DemandRow[]>`
     SELECT d.theme_key, max(d.theme_title) AS theme_title, max(d.observed_at) AS latest_at,
@@ -43,15 +68,14 @@ async function readDemandThemes(q: string | null, limit: number, offset = 0, the
       AND (${q}::text IS NULL OR d.problem_zh ILIKE ${q} OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q} OR d.theme_title ILIKE ${q})
     GROUP BY d.theme_key
     HAVING (${themeKey}::text IS NULL OR d.theme_key = ${themeKey})`;
-  return rows.map(r => {
+  const themes = rows.map(r => {
     const breadth = demandBreadth(r.samples);
     const samples = r.samples.map((sample) => ({ ...sample, sourceUser: null, lifecycleStatus: readLifecycle(sample.coverage), attribution: readAttribution(sample.coverage && (sample.coverage as Record<string, unknown>).attribution) }));
     return { themeKey: r.theme_key, themeTitle: r.theme_title, sampleCount: samples.length,
       sourceCount: breadth.independentThreadCount, ...breadth, latestAt: r.latest_at.toISOString(), samples,
       lifecycleStatus: samples[0]?.lifecycleStatus ?? "reported", attribution: samples[0]?.attribution ?? readAttribution(null) };
-  }).sort((a,b) => Date.parse(b.latestAt) - Date.parse(a.latestAt)
-    || (sort === "evidence" ? b.independentUserCount - a.independentUserCount || b.independentThreadCount - a.independentThreadCount || b.independentPlatformCount - a.independentPlatformCount : 0)
-    || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey)).slice(offset, offset + limit);
+  });
+  return sortDemandThemes(themes, sort).slice(offset, offset + limit);
 }
 
 export async function loadDemandThemes(opts: { q?: string | null; limit?: number; offset?: number; sort?: DemandSort } = {}): Promise<{ themes: DemandTheme[]; totalSamples: number; totalThemes: number; offset: number; sort: DemandSort; generatedAt: string }> {
@@ -97,20 +121,23 @@ export async function loadSignals(opts: { type?: "all" | "demand" | "claim"; q?:
   const topic = opts.topicKey?.trim() || null;
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const demands = type === "claim" ? [] : await sql<Signal[]>`
-    SELECT 'demand' AS kind, d.id, d.topic_key AS "topicKey", d.topic_label AS "topicLabel", coalesce(d.problem_zh, d.problem) AS title,
+    SELECT 'demand' AS kind, d.id, d.topic_key AS "topicKey", d.topic_label AS "topicLabel", coalesce(d.problem_zh, '') AS title,
            nullif(CASE WHEN coalesce(d.scenario_zh, d.scenario) ~ '问题是什么|日常编码或自动化任务|未说明具体复现' THEN '' ELSE coalesce(d.scenario_zh, d.scenario) END || CASE WHEN coalesce(d.workaround_zh, d.workaround) <> '' AND coalesce(d.workaround_zh, d.workaround) !~ '暂未发现明确临时解决办法|原文未明确' THEN '；临时办法：' || coalesce(d.workaround_zh, d.workaround) ELSE '' END, '') AS detail,
            d.original_url AS "sourceUrl", d.source_name AS actor, NULL::text AS status, d.observed_at AS "observedAt"
-    FROM insight_demands d WHERE d.is_testimony AND d.source_kind <> 'hn_comment' AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q}) AND (${topic}::text IS NULL OR d.topic_key = ${topic})
+    FROM insight_demands d
+    WHERE d.is_testimony AND d.source_kind <> 'hn_comment'
+      AND (${q}::text IS NULL OR d.problem ILIKE ${q} OR d.scenario ILIKE ${q})
+      AND (${topic}::text IS NULL OR d.topic_key = ${topic})
     ORDER BY d.observed_at DESC, d.id DESC LIMIT ${limit}`;
   const claims = type === "demand" ? [] : await sql<Signal[]>`
-    SELECT 'claim' AS kind, c.id, c.topic_key AS "topicKey", c.topic_label AS "topicLabel", coalesce(c.claim_zh, c.claim) AS title,
+    SELECT 'claim' AS kind, c.id, c.topic_key AS "topicKey", c.topic_label AS "topicLabel", coalesce(c.claim_zh, '') AS title,
            coalesce(c.claimant_name, c.claimant) || ' · ' || c.claim_type AS detail, coalesce(c.original_claim_url, c.original_source) AS "sourceUrl", coalesce(c.claimant_name, c.claimant) AS actor, c.status, c.observed_at AS "observedAt"
     FROM insight_claims c WHERE c.strong_claim AND (${q}::text IS NULL OR c.claim ILIKE ${q} OR c.claimant ILIKE ${q} OR c.claimant_name ILIKE ${q}) AND (${topic}::text IS NULL OR c.topic_key = ${topic})
     ORDER BY c.observed_at DESC, c.id DESC LIMIT ${limit}`;
   // The two source queries are independently time ordered. Re-sort after
   // merging by the actual observation timestamp so a high id from an older
   // row cannot jump ahead of newer content from the other stream.
-  const signals = [...demands, ...claims].sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt) || b.id - a.id).slice(0, limit);
+  const signals = [...demands].concat(claims).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt) || b.id - a.id).slice(0, limit);
   const topics = await sql<{ key: string; label: string; count: number }[]>`
     SELECT topic_key AS key, max(topic_label) AS label, count(*)::int AS count FROM (
       SELECT topic_key, topic_label FROM insight_demands WHERE topic_key IS NOT NULL

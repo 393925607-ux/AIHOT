@@ -48,7 +48,7 @@ export default function ClaimDetailPage() {
     <div className="space-y-3">
       <section className="card p-5"><h2 className="text-[14px] font-bold text-ink">主张</h2><p className="mt-2 text-[13px] leading-relaxed text-ink-2">{displayClaim}</p><a href={claim.originalSource} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[12px] text-accent">打开原始出处 ↗</a></section>
       <section className="card p-5"><h2 className="text-[14px] font-bold text-ink">证据</h2>{claim.evidence.length ? <ul className="mt-3 space-y-3">{claim.evidence.map((e, i) => <li key={`${e.url}-${i}`} className="text-[13px] leading-relaxed"><span className={`mr-2 rounded px-1.5 py-0.5 text-[11px] ${e.kind === "support" ? "bg-ok-soft text-ok-ink" : e.kind === "conflict" ? "bg-hot-soft text-hot" : "bg-bg-sunk text-ink-3"}`}>{kindLabel(e.kind)}</span><a href={e.url} target="_blank" rel="noreferrer" className="text-accent">{sourceLabel(e.source)}</a><p className="mt-1 text-ink-3">{evidenceText(e)}</p></li>)}</ul> : <p className="mt-2 text-[13px] text-ink-3">暂未找到可直接支持或冲突的独立证据。</p>}</section>
-      <section className="card p-5"><h2 className="text-[14px] font-bold text-ink">还缺什么证据</h2><p className="mt-2 text-[13px] leading-relaxed text-ink-3">{claim.missingEvidence || "暂无"}</p></section>
+      <section className="card p-5"><h2 className="text-[14px] font-bold text-ink">还缺什么证据</h2><p className="mt-2 text-[13px] leading-relaxed text-ink-3">还缺可独立复现的公开测试条件、原始数据和结果。</p></section>
     </div>
   </div>;
 }

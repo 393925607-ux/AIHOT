@@ -2,9 +2,9 @@ import { Link, useLoaderData } from "react-router";
 import type { Route } from "./+types/demands";
 import { loadOr404 } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
-import { buildDateGroups, compareLatestDesc, formatShanghaiTime } from "../lib/date-groups";
-import { publicText } from "../lib/public-text";
+import { buildDateGroups, compareLatestDesc } from "../lib/date-groups";
 import { RadarCard } from "../components/RadarCard";
+import { demandMeta, demandSummary, demandTitle, evidenceLabel } from "../lib/radar-copy";
 
 type Sample = {
   id: number;
@@ -26,22 +26,6 @@ type Sample = {
 type Theme = { themeKey: string; themeTitle: string; sampleCount: number; sourceCount: number; independentUserCount: number; independentThreadCount: number; independentRepoCount: number; independentPlatformCount: number; demandState: "multi_user" | "single_signal"; latestAt: string; samples: Sample[] };
 type DemandResponse = { themes: Theme[]; totalSamples: number; totalThemes: number; offset: number; sort: "latest" | "evidence"; generatedAt: string };
 
-function demandTitle(theme: Theme) {
-  const direct = publicText(theme.themeTitle, "");
-  if (direct) return direct;
-  for (const sample of theme.samples) {
-    const summary = publicText(sample.problemZh, "");
-    if (summary) return summary;
-  }
-  return "";
-}
-
-function evidenceLabel(theme: Theme) {
-  if (theme.demandState === "single_signal") return "单点信号";
-  if (theme.independentThreadCount === 1 && theme.independentPlatformCount === 1) return "同一线程多人";
-  return "多人多源";
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url); const offset = Math.max(Number(url.searchParams.get("offset") ?? 0) || 0, 0); const sort = url.searchParams.get("sort") === "evidence" ? "evidence" : "latest";
   return loadOr404<DemandResponse>(`/api/site/demands?limit=50&offset=${offset}&sort=${sort}`, { signal: request.signal });
@@ -58,21 +42,29 @@ export function headers() {
 export default function DemandsPage() {
   const data = useLoaderData<typeof loader>();
   const compareLatest = compareLatestDesc<Theme>((theme) => theme.latestAt);
-  const visibleThemes = data.themes.filter((theme) => demandTitle(theme));
-  const grouped = buildDateGroups(visibleThemes, (theme) => theme.latestAt, new Date(), (a, b) => compareLatest(a, b) || b.independentUserCount - a.independentUserCount || a.themeKey.localeCompare(b.themeKey));
+  const compareThemes = data.sort === "evidence"
+    ? (a: Theme, b: Theme) => b.independentUserCount - a.independentUserCount
+      || b.independentThreadCount - a.independentThreadCount
+      || b.independentPlatformCount - a.independentPlatformCount
+      || compareLatest(a, b)
+      || a.themeKey.localeCompare(b.themeKey)
+    : (a: Theme, b: Theme) => compareLatest(a, b)
+      || b.independentUserCount - a.independentUserCount
+      || a.themeKey.localeCompare(b.themeKey);
+  const grouped = buildDateGroups(data.themes, (theme) => theme.latestAt, new Date(), compareThemes);
   return (
     <div className="pb-10">
       <header className="pb-5 pt-5 lg:pt-1">
         <p className="text-[12px] font-semibold tracking-[0.08em] text-accent">真实用户需求</p>
         <h1 className="mt-1.5 text-[25px] font-bold tracking-[-0.01em] text-ink">真需求</h1>
-        <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">真实用户现在到底在为什么具体问题折腾？按日期分组，每天内部按最新动态倒序展示。</p>
+        <p className="mt-2 max-w-2xl text-[13.5px] leading-[1.75] text-ink-3">{data.sort === "evidence" ? "按日期分组。同一天内，独立用户更多的排在前面，其次看独立线程和来源平台。" : "按日期分组。同一天内，最新动态排在前面。"}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ink-4" aria-label="需求排序">
           <span>排序：</span>
           <Link className={`rounded-full px-2.5 py-1 ${data.sort === "latest" ? "bg-accent text-white" : "bg-bg-sunk hover:text-ink"}`} to="/demands?sort=latest">最新动态</Link>
           <Link className={`rounded-full px-2.5 py-1 ${data.sort === "evidence" ? "bg-accent text-white" : "bg-bg-sunk hover:text-ink"}`} to="/demands?sort=evidence">证据更充分</Link>
           {data.sort === "evidence" && <span>每天内部按独立用户数 → 独立线程数 → 来源平台数倒序</span>}
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-4"><span className="rounded-full bg-accent-softer px-2.5 py-1"><b className="num text-ink-2">{data.totalSamples}</b> 条原始样本</span><span className="rounded-full bg-bg-sunk px-2.5 py-1"><b className="num text-ink-2">{data.themes.length}</b> 个具体问题</span></div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-4"><span className="rounded-full bg-accent-softer px-2.5 py-1"><b className="num text-ink-2">{data.totalSamples}</b> 条原始样本</span><span className="rounded-full bg-bg-sunk px-2.5 py-1"><b className="num text-ink-2">{data.totalThemes}</b> 个具体问题</span></div>
       </header>
       <div className="space-y-7">
         {grouped.map((group) => (
@@ -80,9 +72,7 @@ export default function DemandsPage() {
             <h2 id={`demands-${group.label}`} className="mb-3 flex items-center gap-2 text-[15px] font-bold text-ink"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{group.label}</h2>
             <div className="space-y-4">
               {group.items.map((theme) => (
-                <Link to={`/demands/${encodeURIComponent(theme.themeKey)}`} key={theme.themeKey} className="block transition-colors hover:[&>article]:border-accent/40">
-                  <RadarCard kind="真需求" status={evidenceLabel(theme)} observedAt={theme.latestAt} title={demandTitle(theme)} meta={<><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程 · <b className="num text-ink-2">{theme.independentPlatformCount}</b> 个来源平台</>} footer={<span>查看详情 →</span>} />
-                </Link>
+                  <RadarCard key={theme.themeKey} kind="真需求" status={evidenceLabel(theme)} observedAt={theme.latestAt} title={demandTitle(theme)} summary={demandSummary(theme)} meta={demandMeta(theme)} footer={<><Link to={`/demands/${encodeURIComponent(theme.themeKey)}`}>查看详情 →</Link>{theme.samples[0]?.originalUrl && <a href={theme.samples[0].originalUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</>} />
               ))}
             </div>
           </section>
