@@ -10,65 +10,57 @@
 import { z } from "zod";
 import { closeDb, sql } from "@aihot/backend/db";
 import { judge, safeError } from "./phase4-common.ts";
+import { decideClaimGate, type GateModel, type ManualOverride } from "@aihot/backend/insights/claim-gate";
 
 const CLAIM_TYPES = ["性能", "成本", "用户量", "Benchmark", "产品能力"] as const;
 const CLAIMANT_TYPES = ["company", "official_account", "founder_or_executive", "project_author", "benchmark_publisher", "researcher", "media_or_analyst"] as const;
 const INTERESTS = ["interested", "independent"] as const;
 
-const Decision = z.object({
-  id: z.number(),
-  eligible: z.boolean(),
-  confidence: z.string().nullish(),
-  atomic: z.boolean().nullish(),
-  claimantName: z.string().trim().max(200).nullish(),
-  claimantType: z.enum(CLAIMANT_TYPES).nullish(),
-  claimantInterest: z.enum(INTERESTS).nullish(),
-  claimType: z.enum(CLAIM_TYPES).nullish(),
-  originalClaimUrl: z.string().url().nullish(),
-  reason: z.string().max(600).nullish(),
-});
-const Batch = z.union([
-  z.object({ items: z.array(Decision).optional(), results: z.array(Decision).optional() }),
-  z.array(Decision),
-]);
+const Decision = z.any();
+const Batch = z.any();
 
 type ClaimRow = {
   id: number;
   claim: string;
   claimant: string;
+  claimant_name: string | null;
+  claimant_type: (typeof CLAIMANT_TYPES)[number] | null;
+  claimant_interest: (typeof INTERESTS)[number] | null;
   claim_type: (typeof CLAIM_TYPES)[number];
   original_source: string;
+  original_claim_url: string | null;
   source_item_id: string;
   strong_claim: boolean;
 };
-type Policy = {
-  eligible: boolean;
-  claimantName: string;
-  claimantType: (typeof CLAIMANT_TYPES)[number];
-  claimantInterest: (typeof INTERESTS)[number];
-  claimType?: (typeof CLAIM_TYPES)[number];
-  originalClaimUrl?: string;
-  reason: string;
-};
+const SYSTEM = `你是 AI Reality Radar 的 Claim Gate。判断公开材料是否应进入“牛皮账本”。Claim 是 AI 圈中可归因、具体、显著、可验证的强公开主张；利益相关方、独立 Benchmark 发布者、研究者、专业媒体都可以作为来源角色，claimantInterest 只记录 provenance，不是硬门槛。普通项目介绍、Show HN 标题、问题句、愿望、新闻标题、数据集说明和空泛营销必须 false。每条只保留一个核心命题，保留 up to、at least、特定硬件/地区/测试条件等限定词。必须明确返回 attributable、specific、material、verifiable、atomic_enough 五个布尔字段和 reasonCode、reasonZh；eligible=false 没有结构化 reasonCode 时结果不可用。不要判断真假，不要臆造 URL。严格返回 JSON。`;
 
-// These are the seven rows accepted by Phase 4/5. Keep only the three that
-// describe an interested party's concrete, testable assertion. The four
-// benchmark/project announcements remain discoverable evidence, never Claims.
-const POLICY: Record<number, Policy> = {
-  165: { eligible: true, claimantName: "Bito", claimantType: "company", claimantInterest: "interested", claimType: "Benchmark", reason: "Bito publishes the measured 46% assumption-rate assertion." },
-  181: { eligible: true, claimantName: "Alibaba / Qwen", claimantType: "company", claimantInterest: "interested", claimType: "Benchmark", originalClaimUrl: "https://github.com/QwenLM/Qwen-Image-2.1", reason: "The source reports Alibaba/Qwen's concrete model comparison; the HN author is only the discovery actor." },
-  195: { eligible: true, claimantName: "OliverDB / OliverAI", claimantType: "company", claimantInterest: "interested", reason: "OliverDB publishes a concrete performance/cost comparison with explicit numbers." },
-  177: { eligible: false, claimantName: "Raycaster", claimantType: "benchmark_publisher", claimantInterest: "independent", reason: "Independent benchmark result is evidence, not an interested-party Claim." },
-  183: { eligible: false, claimantName: "Krisp", claimantType: "company", claimantInterest: "interested", reason: "Krisp's open STT benchmark announcement describes a dataset and method, not a product Claim." },
-  186: { eligible: false, claimantName: "Artificial Analysis", claimantType: "benchmark_publisher", claimantInterest: "independent", reason: "Artificial Analysis measured its own index; the result belongs in evidence." },
-  199: { eligible: false, claimantName: "AskCooper", claimantType: "company", claimantInterest: "interested", reason: "A 166-case benchmark announcement is a dataset description without a product comparison Claim." },
-};
+function dataItems(data: unknown): Array<Record<string, any>> {
+  const raw = Array.isArray(data) ? data : data && typeof data === "object" ? ((data as any).items ?? (data as any).results ?? []) : [];
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const x = item as Record<string, any>;
+    const id = Number(x.id);
+    return Number.isInteger(id) ? [{ ...x, id, atomicEnough: x.atomicEnough ?? x.atomic_enough, reasonCode: x.reasonCode ?? null, reasonZh: x.reasonZh ?? null }] : [];
+  });
+}
 
-const SYSTEM = `你是 AI Reality Radar 的 Claim Gate。判断公开材料是否应进入“牛皮账本”。只把利益相关方主动提出的、具体、显著、可验证且带数字/比较/性能/成本/用户量/Benchmark/明确产品能力或边界承诺的陈述判 eligible=true。普通项目介绍、Show HN 标题、问题句、愿望、新闻标题、第三方独立测量结果、只描述数据集/Benchmark 而没有宣传性主张的材料必须 false。独立 Benchmark 发布者自己的测量通常是 evidence，不是 Claim；除非其主动宣传自己的比较结论。HN author 只是发现者，不要把他当 claimant。每条只保留一个核心命题；速度、成本、准确率等多个互不相同指标不能塞进一条。claimantType 只能是 company、official_account、founder_or_executive、project_author、benchmark_publisher、researcher、media_or_analyst；claimantInterest 只能是 interested 或 independent。不要判断真假，不要臆造 URL。严格返回 JSON。`;
+async function judgeWithRetry(batch: ClaimRow[], index: number) {
+  let last: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { return await judge("claim_gate_v6", `claim-gate:${batch[0]?.id ?? index}:attempt-${attempt + 1}`, SYSTEM, batch.map((c) => ({ id: c.id, claim: c.claim, claimant: c.claimant, claimantName: c.claimant_name, claimantType: c.claimant_type, claimantInterest: c.claimant_interest, claimType: c.claim_type, originalSource: c.original_source, discoverySource: c.source_item_id })), Batch, 1600); } catch (error) { last = error; }
+  }
+  throw last;
+}
 
-function dataItems(data: z.infer<typeof Batch>): z.infer<typeof Decision>[] {
-  if (Array.isArray(data)) return data;
-  return data.items ?? data.results ?? [];
+async function judgeOneWithRetry(claim: ClaimRow) {
+  let last: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await judge("claim_gate_v6_single", `claim-gate-single:${claim.id}:attempt-${attempt + 1}`, SYSTEM, { items: [{ id: claim.id, claim: claim.claim, claimant: claim.claimant, claimantName: claim.claimant_name, claimantType: claim.claimant_type, claimantInterest: claim.claimant_interest, claimType: claim.claim_type, originalSource: claim.original_source, discoverySource: claim.source_item_id }] }, Batch, 900);
+    } catch (error) { last = error; }
+  }
+  throw last;
 }
 
 function usableUrl(value: string | undefined, fallback: string): string | null {
@@ -80,24 +72,30 @@ function usableUrl(value: string | undefined, fallback: string): string | null {
 }
 
 async function main() {
-  const claims = await sql<ClaimRow[]>`SELECT id, claim, claimant, claim_type, original_source, source_item_id, strong_claim FROM insight_claims ORDER BY id`;
+  const claims = await sql<ClaimRow[]>`SELECT id, claim, claimant, claimant_name, claimant_type, claimant_interest, claim_type, original_source, original_claim_url, source_item_id, strong_claim FROM insight_claims ORDER BY id`;
   const decisions = new Map<number, z.infer<typeof Decision>>();
   const modelErrors: Array<{ id: number; error: string }> = [];
 
   for (let i = 0; i < claims.length; i += 6) {
     const batch = claims.slice(i, i + 6);
     try {
-      const result = await judge(
-        "claim_gate_v6",
-        `claim-gate:${batch[0]?.id ?? i}`,
-        SYSTEM,
-        batch.map((c) => ({ id: c.id, claim: c.claim, claimant: c.claimant, claimType: c.claim_type, originalSource: c.original_source, discoverySource: c.source_item_id })),
-        Batch,
-        1400,
-      );
+      const result = await judgeWithRetry(batch, i);
       for (const item of dataItems(result.data)) if (batch.some((c) => c.id === item.id)) decisions.set(item.id, item);
+      for (const claim of batch) if (!decisions.has(claim.id)) {
+        try {
+          const single = await judgeOneWithRetry(claim);
+          const [item] = dataItems(single.data);
+          if (item) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: "missing_single_judgement" });
+        } catch (singleError) { modelErrors.push({ id: claim.id, error: safeError(singleError) }); }
+      }
     } catch (error) {
-      for (const claim of batch) modelErrors.push({ id: claim.id, error: safeError(error) });
+      for (const claim of batch) {
+        try {
+          const single = await judgeOneWithRetry(claim);
+          const [item] = dataItems(single.data);
+          if (item) decisions.set(claim.id, item); else modelErrors.push({ id: claim.id, error: "missing_single_judgement" });
+        } catch (singleError) { modelErrors.push({ id: claim.id, error: safeError(singleError) }); }
+      }
     }
   }
 
@@ -105,31 +103,34 @@ async function main() {
   let eligible = 0;
   let evidenceOnly = 0;
   for (const claim of claims) {
-    const model = decisions.get(claim.id);
-    const policy = POLICY[claim.id];
-    // Current Phase 4 rows have a conservative policy boundary, but the model
-    // still has to approve an allowed row when a real judgement is available.
-    // If the provider is unavailable, only the three reviewed baseline rows are
-    // kept; unknown/new rows remain hidden until a model judgement exists.
-    const confidence = (model?.confidence ?? "").toLowerCase();
-    const modelAccepted = model?.eligible === true && model.atomic !== false && !confidence.includes("low") && !confidence.includes("低");
-    const modelFailure = modelErrors.some((error) => error.id === claim.id);
-    const accepted = policy?.eligible === true ? (modelFailure || !model ? true : modelAccepted) : false;
-    const claimantName = policy?.claimantName ?? model?.claimantName ?? null;
-    const claimantType = policy?.claimantType ?? model?.claimantType ?? null;
-    const claimantInterest = policy?.claimantInterest ?? model?.claimantInterest ?? null;
-    const claimType = policy?.claimType ?? model?.claimType ?? claim.claim_type;
-    const originalClaimUrl = usableUrl(model?.originalClaimUrl, policy?.originalClaimUrl ?? claim.original_source);
+    const rawModel = decisions.get(claim.id);
+    const model = rawModel ? { ...rawModel, atomicEnough: rawModel.atomic_enough } as GateModel : undefined;
+    const modelError = modelErrors.find((x) => x.id === claim.id)?.error ?? null;
+    const [overrideRow] = await sql<{ claim_gate_judgement: { manualOverride?: ManualOverride } | null }[]>`SELECT claim_gate_judgement FROM insight_claims WHERE id=${claim.id}`;
+    const decision = decideClaimGate({ model, modelError, manualOverride: overrideRow?.claim_gate_judgement?.manualOverride ?? null });
+    const accepted = decision.decision === "publish";
+    const preservePublished = claim.strong_claim && (decision.decision === "needs_review" || decision.decision === "model_error");
+    const finalPublished = accepted || preservePublished;
+    const claimantName = model?.claimantName ?? claim.claimant_name;
+    const claimantType = model?.claimantType ?? claim.claimant_type;
+    const claimantInterest = model?.claimantInterest ?? claim.claimant_interest;
+    const claimType = model?.claimType ?? claim.claim_type;
+    const originalClaimUrl = usableUrl(model?.originalClaimUrl ?? undefined, claim.original_claim_url ?? claim.original_source);
     const judgement = {
       phase: 6,
       reviewedAt: now,
       model: model ?? null,
-      policy: policy ?? null,
-      finalEligible: accepted,
-      modelError: modelErrors.find((x) => x.id === claim.id)?.error ?? null,
+      policy: null,
+      decision: decision.decision,
+      decisionReason: decision.reason,
+      decisionReasonCode: decision.reasonCode,
+      finalEligible: finalPublished,
+      preservedPublished: preservePublished,
+      modelError,
+      manualOverride: overrideRow?.claim_gate_judgement?.manualOverride ?? null,
     };
     await sql`UPDATE insight_claims SET
-      strong_claim=${accepted},
+      strong_claim=${finalPublished},
       claim_type=${claimType},
       claimant_name=${claimantName},
       claimant_type=${claimantType},
@@ -137,7 +138,7 @@ async function main() {
       original_claim_url=${originalClaimUrl},
       claim_gate_judgement=${sql.json(judgement as never)}
       WHERE id=${claim.id}`;
-    if (accepted) eligible++; else if (policy) evidenceOnly++;
+    if (finalPublished) eligible++; else if (decision.decision === "reject") evidenceOnly++;
   }
   console.log(JSON.stringify({ ok: true, claims: claims.length, eligible, evidenceOnly, modelJudged: decisions.size, modelErrors: modelErrors.length }));
 }

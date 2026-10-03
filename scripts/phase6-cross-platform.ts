@@ -11,6 +11,7 @@ const Verdict = z.object({ accepted: z.boolean().optional(), accept: z.boolean()
 const Match = z.object({ relation: z.enum(["same_demand", "different_demand", "uncertain"]), confidence: z.enum(["high", "medium", "low"]), reason: z.string().max(400) });
 const QUERIES = ["Claude Code permission", "Codex Computer Use", "AI coding agent workflow problem"];
 const clean = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+const safeThemeKey = (value: string) => `demand-theme-hn-${value.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 180)}`;
 async function search(query: string): Promise<Hit[]> {
   const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=comment&hitsPerPage=40`;
   const res = await fetch(url, { headers: { "user-agent": "AI-Reality-Radar/1.0" }, signal: AbortSignal.timeout(20_000) });
@@ -53,7 +54,7 @@ async function main() {
     if (!acceptedVerdict || confidence.includes('low') || quote.length < 8 || !clean(hit.comment_text).includes(clean(quote))) continue;
     const itemId = `phase6:${hit.sourceKind}:${hit.objectID}`;
     const originalUrl = hit.url;
-    let themeKey = `demand-theme-hn-${hit.objectID}`, themeTitle = problem;
+    let themeKey = safeThemeKey(hit.objectID), themeTitle = problem;
     const vec = await ensureEmbeddings('fact', [{ id: `phase6-hn:${hit.objectID}`, text: `${problem}\n${scenario}\n${quote}` }]);
     const candidates = roots.map(r => ({ root: r, score: cosine(vec.get(`phase6-hn:${hit.objectID}`) ?? [], vectors.get(`phase6-root:${r.id}`) ?? []) })).sort((a,b)=>b.score-a.score).slice(0,3).filter(x=>x.score>=0.42);
     for (const candidate of candidates) {
@@ -64,7 +65,7 @@ async function main() {
     }
     await sql`INSERT INTO insight_demands(theme_key,theme_title,problem,scenario,workaround,evidence,original_url,source_name,source_user,source_item_id,source_kind,observed_at,problem_zh,scenario_zh,workaround_zh,raw_content,source_ref,is_testimony,testimony_judgement)
       VALUES(${themeKey},${themeTitle},${problem},${scenario},${workaround},${quote},${originalUrl},${hit.sourceKind === 'openai_community' ? 'OpenAI Community' : 'Hacker News 评论'},${hit.author ?? ""},${itemId},${hit.sourceKind},${new Date(hit.created_at)},${problem},${scenario},${workaround},${hit.comment_text},${originalUrl},true,${sql.json({ ...verdict, phase: 6, storyTitle: hit.story_title, parentId: hit.parent_id, sourceKind: hit.sourceKind } as never)})
-      ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=EXCLUDED.theme_title,
+      ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=CASE WHEN coalesce(insight_demands.theme_title,'')<>'' THEN insight_demands.theme_title ELSE EXCLUDED.theme_title END,
         problem_zh=CASE WHEN coalesce(insight_demands.problem_zh,'')<>'' THEN insight_demands.problem_zh ELSE EXCLUDED.problem_zh END,
         scenario_zh=CASE WHEN coalesce(insight_demands.scenario_zh,'')<>'' THEN insight_demands.scenario_zh ELSE EXCLUDED.scenario_zh END,
         workaround_zh=CASE WHEN coalesce(insight_demands.workaround_zh,'')<>'' THEN insight_demands.workaround_zh ELSE EXCLUDED.workaround_zh END,

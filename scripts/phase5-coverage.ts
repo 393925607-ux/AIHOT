@@ -58,27 +58,27 @@ async function scan(root: Root) {
     coverage.judgementComplete=verdicts.size===candidates.length;
     await sql.begin(async tx=>{
     await tx`UPDATE insight_demands SET raw_content=coalesce(nullif(raw_content,''),${body.slice(0,60000)}), source_ref=${issue.html_url}, source_user=${issue.user.login},
-      is_testimony=${valid}, theme_key=${`demand-${root.id}`}, theme_title=${extracted.problem_zh}, observed_at=${new Date(issue.updated_at)},
+      is_testimony=${valid}, theme_key=${`demand-${root.id}`}, theme_title=CASE WHEN coalesce(theme_title,'') <> '' THEN theme_title ELSE ${extracted.problem_zh} END, observed_at=${new Date(issue.updated_at)},
       problem_zh=CASE WHEN coalesce(problem_zh,'') <> '' THEN problem_zh ELSE ${extracted.problem_zh} END,
       scenario_zh=CASE WHEN coalesce(scenario_zh,'') <> '' THEN scenario_zh ELSE ${extracted.scenario_zh || "原文未明确使用场景"} END,
       workaround_zh=CASE WHEN coalesce(workaround_zh,'') <> '' THEN workaround_zh ELSE ${extracted.workaround_zh} END,
       testimony_judgement=${tx.json({ ...extracted,receiptId:rootReceiptId,commentPhase:"pending",phase:5 } as never)} WHERE id=${root.id}`;
 
       // The full thread was obtained before invalidating disappeared/changed comment testimony.
-      await tx`UPDATE insight_demands SET is_testimony=false WHERE source_kind='github_comment' AND source_ref=${issue.html_url} AND coalesce(testimony_judgement->>'manualOverride','') <> 'accepted_same_problem_testimony'`;
+      await tx`UPDATE insight_demands SET is_testimony=false WHERE source_kind='github_comment' AND source_ref=${issue.html_url} AND coalesce(testimony_judgement->>'manualOverride','') = ''`;
       for(const c of rows) {
         const v=verdicts.get(c.id) ?? {same_problem_testimony:false,confidence:"high" as const,reason:"机器人/维护者/无本人经历线索；规则排除",quote:"",summary:"",workaround:null};
         const accepted=valid && acceptedTestimony(v,c.user?.login ?? null,c.user?.type,c.author_association) && sameQuote(v.quote,c.body ?? "");
         if(accepted) coverage.accepted=Number(coverage.accepted)+1;
         await tx`INSERT INTO insight_demands(theme_key,theme_title,problem,scenario,workaround,evidence,original_url,source_name,source_user,source_item_id,source_kind,observed_at,problem_zh,scenario_zh,workaround_zh,raw_content,source_ref,is_testimony,testimony_judgement)
         VALUES(${`demand-${root.id}`},${extracted.problem_zh},${root.problem},${extracted.scenario_zh},${v.workaround ?? ""},${v.quote || sourceText(c.body ?? "").slice(0,250)},${c.html_url},${`GitHub 评论 · ${repo}`},${c.user?.login ?? null},${`github_comment:${c.id}`},'github_comment',${new Date(c.updated_at)},${v.summary || extracted.problem_zh},${extracted.scenario_zh},${v.workaround ?? ""},${sourceText(c.body ?? "").slice(0,60000)},${issue.html_url},${accepted},${tx.json({...v,phase:5} as never)})
-        ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=EXCLUDED.theme_title,
-          is_testimony=CASE WHEN coalesce(insight_demands.testimony_judgement->>'manualOverride','')='accepted_same_problem_testimony' THEN insight_demands.is_testimony ELSE EXCLUDED.is_testimony END,
+        ON CONFLICT(source_kind,source_item_id) DO UPDATE SET theme_key=EXCLUDED.theme_key,theme_title=CASE WHEN coalesce(insight_demands.theme_title,'')<>'' THEN insight_demands.theme_title ELSE EXCLUDED.theme_title END,
+          is_testimony=CASE WHEN coalesce(insight_demands.testimony_judgement->>'manualOverride','')<>'' THEN insight_demands.is_testimony ELSE EXCLUDED.is_testimony END,
           source_user=EXCLUDED.source_user,source_ref=EXCLUDED.source_ref,evidence=EXCLUDED.evidence,raw_content=EXCLUDED.raw_content,
           problem_zh=CASE WHEN coalesce(insight_demands.problem_zh,'')<>'' THEN insight_demands.problem_zh ELSE EXCLUDED.problem_zh END,
           scenario_zh=CASE WHEN coalesce(insight_demands.scenario_zh,'')<>'' THEN insight_demands.scenario_zh ELSE EXCLUDED.scenario_zh END,
           workaround_zh=CASE WHEN coalesce(insight_demands.workaround_zh,'')<>'' THEN insight_demands.workaround_zh ELSE EXCLUDED.workaround_zh END,
-          testimony_judgement=CASE WHEN coalesce(insight_demands.testimony_judgement->>'manualOverride','')='accepted_same_problem_testimony' THEN insight_demands.testimony_judgement ELSE EXCLUDED.testimony_judgement END,
+          testimony_judgement=CASE WHEN coalesce(insight_demands.testimony_judgement->>'manualOverride','')<>'' THEN insight_demands.testimony_judgement ELSE EXCLUDED.testimony_judgement END,
           observed_at=EXCLUDED.observed_at`;
       }
       // The public corpus is complete once every page was read. A malformed

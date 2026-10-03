@@ -66,7 +66,7 @@ export default function DemandsPage() {
             <h2 id={`demands-${group.label}`} className="mb-3 flex items-center gap-2 text-[15px] font-bold text-ink"><span className="h-1.5 w-1.5 rounded-full bg-accent" />{group.label}</h2>
             <div className="space-y-4">
               {group.items.map((theme) => (
-                <Link to={`/demands/${theme.themeKey}`} key={theme.themeKey} className="card block overflow-hidden transition-colors hover:border-accent/40">
+                <Link to={`/demands/${encodeURIComponent(theme.themeKey)}`} key={theme.themeKey} className="card block overflow-hidden transition-colors hover:border-accent/40">
                   <div className="border-b border-line-soft px-5 py-4 sm:px-6">
                     <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[17px] font-bold text-ink">{demandTitle(theme)}</h3><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程</span></div>
                   </div>

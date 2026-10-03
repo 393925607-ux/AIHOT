@@ -49,7 +49,11 @@ async function translateDemands(items: Array<{ id: number; problem: string; scen
   for (let i = 0; i < items.length; i += 8) {
     const batch = items.slice(i, i + 8);
     const result = await ask("insight_demand_zh", `demand-zh:${batch[0]!.id}`, "把公开用户反馈翻译成自然、简洁、忠实的中文产品文案。只返回 JSON，顶层字段可用 items 或 translations。保留具体问题，不夸大，不补充原文没有的事实。字段：problemZh、scenarioZh、workaroundZh。", JSON.stringify(batch), DemandZhBatch);
-    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_demands SET problem_zh = ${item.problemZh}, scenario_zh = ${item.scenarioZh || "原文未明确说明具体使用场景"}, workaround_zh = ${item.workaroundZh ?? ""} WHERE id = ${item.id}`;
+    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_demands SET
+      problem_zh = CASE WHEN coalesce(problem_zh,'')='' THEN ${item.problemZh} ELSE problem_zh END,
+      scenario_zh = CASE WHEN coalesce(scenario_zh,'')='' THEN ${item.scenarioZh || "原文未明确说明具体使用场景"} ELSE scenario_zh END,
+      workaround_zh = CASE WHEN coalesce(workaround_zh,'')='' THEN ${item.workaroundZh ?? ""} ELSE workaround_zh END
+      WHERE id = ${item.id}`;
   }
 }
 
@@ -59,7 +63,7 @@ async function translateClaims(items: Array<{ id: number; claim: string }>) {
   for (let i = 0; i < items.length; i += 10) {
     const batch = items.slice(i, i + 10);
     const result = await ask("insight_claim_zh", `claim-zh:${batch[0]!.id}`, "把公开 Claim 翻译成自然、忠实的中文。只返回 JSON，顶层字段可用 items 或 translations。必须保留 up to、at least、approximately、average、peak、may、can、preview、beta、internal benchmark、selected workloads、特定硬件/地区/套餐/测试条件等限定词，不要把主张翻译得更强。", JSON.stringify(batch), ClaimZhBatch);
-    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_claims SET claim_zh = ${item.claimZh ?? item.translation ?? item.id.toString()} WHERE id = ${item.id}`;
+    for (const item of result.items ?? result.translations ?? []) if (batch.some((x) => x.id === item.id)) await sql`UPDATE insight_claims SET claim_zh = CASE WHEN coalesce(claim_zh,'')='' THEN ${item.claimZh ?? item.translation ?? item.id.toString()} ELSE claim_zh END WHERE id = ${item.id}`;
   }
 }
 

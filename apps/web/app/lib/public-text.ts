@@ -22,7 +22,7 @@ const PREFIX_TRANSLATIONS: Array<[string, string]> = [
 ];
 
 const ALLOWED_TERMS = new Set(
-  "Windows Computer Use Claude Code Codex ChatGPT Chrome MCP GitHub OpenAI Gemini Qwen Snowflake Hacker News Agent Browser Remote Desktop Android iOS macOS Linux CLI API URL HTTP RPC GPU GB MB OOM Xcode PowerShell Benchmark SOTA GPT SWE Pro Fable Cowork MSIX WebView2 Electron Chromium Apple Safari Finder WSL AWS HTTPS_PROXY Bedrock SSO DNS sky getApp listApps Trusted Darwin App Sol Ultra"
+  "Windows Computer Use Claude Code Codex ChatGPT Chrome MCP GitHub OpenAI Gemini Qwen Snowflake Hacker News Agent Browser Remote Desktop Android iOS macOS Linux CLI API URL HTTP RPC GPU GB MB OOM Xcode PowerShell Benchmark SOTA GPT SWE Pro Fable Cowork MSIX WebView2 Electron Chromium Apple Safari Finder WSL AWS HTTPS_PROXY Bedrock SSO DNS sky getApp listApps Trusted Darwin App Sol Ultra Ultrafast token tokens Astra Standard SynthID Bio DeepMind NVIDIA SemiAnalysis Vera Rubin NVL72 GB300"
     .split(" "),
 );
 
@@ -32,6 +32,7 @@ const TECHNICAL_PHRASES: Array<[string, string]> = [
   ["Trusted RPC service is not configured: sky", "可信 RPC 服务未配置：sky"],
   ["Missing HCS services: vfpext", "缺少 HCS 服务：vfpext"],
   ["Steered conversation", "转向中的对话"],
+  ["设为 allow", "设为允许"],
 ];
 
 function normalizeTechnicalPhrases(value: string): string {
@@ -68,5 +69,8 @@ export function displayClaimant(value: string | null | undefined): string {
   if (value === "Alibaba / Qwen") return "阿里巴巴 / 通义千问";
   if (value === "OliverDB / OliverAI") return "奥利弗数据库";
   if (value === "Bito") return "比托";
+  if (value === "NVIDIA") return "NVIDIA";
+  if (value === "Google DeepMind") return "Google DeepMind";
+  if (value === "OpenAI") return "OpenAI";
   return value && !/[A-Za-z]/.test(value) ? value : "未标注提出方";
 }

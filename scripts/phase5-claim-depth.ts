@@ -4,6 +4,7 @@ import { closeDb, sql } from "@aihot/backend/db";
 import { guardedFetch } from "@aihot/backend/lib/http-fetch";
 import { claimStatus, publicCanonical, type VerifiedEvidence } from "@aihot/backend/insights/validity";
 import { judge } from "./phase4-common.ts";
+import { exactRelation } from "@aihot/backend/insights/claim-gate";
 
 type Claim = { id: number; claim: string; claimant: string; original_source: string; evidence: VerifiedEvidence[]; status: string };
 type Candidate = { url: string; label: string; independence?: "independent" | "same_source" | "reprint"; tier: "A" | "B" | "C" | "D" };
@@ -28,8 +29,9 @@ const VerdictOutput = z.object({ claim_id: z.number().optional(), verdict: z.str
 const JudgmentOutput = z.object({ claim_id: z.number().optional(), judgment: z.string(), quote: z.string().optional(), reason: z.string().optional() });
 const RelationOutput = z.union([Relation, VerdictOutput, JudgmentOutput, z.object({ result: Relation }), z.object({ judgement: Relation })]);
 function normalizeRelation(raw: z.infer<typeof Relation> | z.infer<typeof VerdictOutput> | z.infer<typeof JudgmentOutput>) {
-  const r = ("verdict" in raw ? raw.verdict : "judgment" in raw ? raw.judgment : raw.relation).toLowerCase();
-  const relation = r.includes("support") || r.includes("支持") ? "supports" : r.includes("conflict") || r.includes("冲突") || r.includes("contrad") ? "conflicts" : r.includes("unrelated") || r.includes("无关") ? "unrelated" : "related";
+  const r = ("verdict" in raw ? raw.verdict : "judgment" in raw ? raw.judgment : raw.relation);
+  const relation = exactRelation(r);
+  if (!relation) throw new Error("unknown_relation");
   const c = ("confidence" in raw ? raw.confidence ?? "medium" : "medium").toLowerCase();
   const confidence = c.includes("high") || c.includes("高") ? "high" : c.includes("low") || c.includes("低") ? "low" : "medium";
   return { relation, confidence, quote: (raw.quote ?? "").slice(0, 600), reason: (raw.reason ?? "").slice(0, 400) } as const;
@@ -70,13 +72,13 @@ async function main() {
     for (const e of [...(claim.evidence ?? []), ...additions]) { const normalized = (e.kind === "support" || e.kind === "conflict") && e.independent !== true ? { ...e, kind: "related" as const } : e; dedup.set(`${normalized.kind}:${publicCanonical(normalized.url)}:${normalized.quote}`, normalized); }
     const evidence = [...dedup.values()];
     const status = claimStatus(evidence);
-    const missing = status === "未验证" ? "仍需不同来源的同一指标实测、公开测试条件和可复现原始数据" : status === "部分支持" ? "仍需第二个独立来源，或公开相同测试条件下的复现实验" : "";
-    const queryIntents: Record<number,string[]> = {
-      165: ["Bito AI coding models assumptions 46% methodology", "Bito assumption naming benchmark denominator", "independent replication AI coding model ambiguity benchmark"],
-      181: ["Qwen Image 2.1 Nano Banana 2.0 official benchmark", "Qwen Image Bench 60.28 59.82 methodology", "independent Qwen Image 2.1 comparison"],
-      195: ["OliverDB Snowflake 9.67x 8x compute benchmark", "OliverDB 26 queries 50 million rows methodology", "independent OliverDB performance replication"],
-    };
-    audit["queryIntents"] = queryIntents[claim.id] ?? [];
+    const missing = status === "未验证" ? `已检查 ${got.length} 个候选来源，尚未找到可独立复现“${claim.claim.slice(0, 80)}”的公开测试条件、原始数据和结果。` : status === "部分支持" ? "已有一份直接材料，仍缺第二个可核对相同指标和测试条件的独立来源。" : "";
+    const generatedQueries = [claim.claim, `${claim.claimant} ${claim.claim}`, `${claim.claim} independent benchmark`].slice(0, 3);
+    audit["queryIntents"] = generatedQueries;
+    audit["queryGenerated"] = generatedQueries.length;
+    audit["queryExecuted"] = 0;
+    audit["searchStatus"] = "search_blocked";
+    audit["searchReason"] = "No unattended web-search provider is configured; official source links and seeded public URLs were fetched instead.";
     audit["tierCounts"] = got.reduce((m,x) => { if (x.fetchStatus === "ok") m[x.tier] = (m[x.tier] ?? 0) + 1; return m; }, {} as Record<string,number>);
     audit["deepRead"] = got.filter(x => x.fetchStatus === "ok").map(x => x.url);
     audit["manualReview"] = [165,181,195].includes(claim.id) ? "pending" : "evidence_only";
