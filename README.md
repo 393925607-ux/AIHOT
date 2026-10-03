@@ -10,12 +10,12 @@ AIHOT 只作为底层 Engine，负责公开来源、抓取、PostgreSQL、LLM、
 
 ## 当前数据快照（2026-10-03）
 
-- Demand 有效样本：206
-- Demand Theme：86（multi_user 16，single_signal 70）
+- Demand 有效样本：238
+- Demand Theme：102（multi_user 仍按页面实时统计，single_signal 仍按页面实时统计）
 - Claim 数据库：43
 - 前台 Claim：5，全部为“未验证”
 - Demand 已覆盖 GitHub Issue/Comment、GitHub Discussions、OpenAI Community、Hacker News、Stack Exchange、Hugging Face 社区；当前仍以 GitHub 为主
-- Claim 深度取证最近一轮：5 条 Claim，读取 9 个候选，完成 8 个关系判断；独立支持 0，独立冲突 0，检索状态仍为 blocked/search_blocked
+- Claim 深度取证本轮：5 条 Claim，执行 37 次查询，20 个有效深读，独立支持 0，独立冲突 0，状态均为未验证
 
 ## 核心规则
 
@@ -34,7 +34,7 @@ AIHOT 只作为底层 Engine，负责公开来源、抓取、PostgreSQL、LLM、
 
 `demand-discovery → coverage → group-demands → cross-platform → claim-discovery → claim-gate → claim-depth`
 
-正式 timer 使用 runtime-only 凭据和 flock。2026-10-03 03:42 的自然触发已完成整条链；15:25 的短周期收口验证在 claim-depth 发现部分失败后退出码为 1，避免静默成功。临时 timer 已清理，正式 timer 仍 enabled/active。
+正式 timer 使用 runtime-only 凭据和 flock。2026-10-03 03:42 的自然触发已完成整条链；17:33 的 closeout timer 在 coverage root 1023 判定失败后退出码为 1，保留 partial 并可 resume；临时 timer 已清理，正式 timer 仍 enabled/active。
 
 ## 当前限制
 
