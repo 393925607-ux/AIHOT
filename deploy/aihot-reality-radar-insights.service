@@ -13,7 +13,7 @@ Environment=PATH=/home/opc/.local/bin:/home/opc/bin:/usr/local/bin:/usr/bin
 EnvironmentFile=/etc/aihot-reality-radar.env
 RuntimeDirectory=aihot-reality-radar
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock -n /run/aihot-reality-radar/insights.lock /bin/bash -c 'set -Eeuo pipefail; scripts/run-insights.sh demand-discovery && scripts/run-insights.sh coverage --resume && scripts/run-insights.sh group-demands && scripts/run-insights.sh cross-platform && scripts/run-insights.sh claim-discovery && scripts/run-insights.sh claim-gate && scripts/run-insights.sh claim-depth'
+ExecStart=/usr/bin/flock -n /run/aihot-reality-radar/insights.lock /bin/bash -c 'set -Eeuo pipefail; scripts/run-insights.sh demand-discovery && scripts/run-insights.sh coverage --resume && scripts/run-insights.sh group-demands && scripts/run-insights.sh cross-platform && scripts/run-insights.sh claim-discovery && scripts/run-insights.sh claim-gate && scripts/run-insights.sh claim-depth && scripts/run-insights.sh stable-autonomy'
 NoNewPrivileges=true
 PrivateTmp=true
 TimeoutStartSec=3600
