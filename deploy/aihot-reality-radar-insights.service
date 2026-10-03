@@ -16,4 +16,4 @@ RuntimeDirectoryMode=0750
 ExecStart=/usr/bin/flock -n /run/aihot-reality-radar/insights.lock /bin/bash -c 'set -Eeuo pipefail; scripts/run-insights.sh demand-discovery && scripts/run-insights.sh coverage --resume && scripts/run-insights.sh group-demands && scripts/run-insights.sh cross-platform && scripts/run-insights.sh claim-discovery && scripts/run-insights.sh claim-gate && scripts/run-insights.sh claim-depth'
 NoNewPrivileges=true
 PrivateTmp=true
-TimeoutStartSec=1800
+TimeoutStartSec=3600

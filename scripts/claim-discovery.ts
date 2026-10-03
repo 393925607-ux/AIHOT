@@ -26,7 +26,7 @@ const clean = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\
 const claimType = (hint: string | undefined): (typeof CLAIM_TYPES)[number] => hint && CLAIM_TYPES.includes(hint as any) ? hint as any : /cost|成本/i.test(hint ?? "") ? "成本" : /benchmark|基准/i.test(hint ?? "") ? "Benchmark" : /speed|throughput|latency|性能/i.test(hint ?? "") ? "性能" : "产品能力";
 const checkpoint = (value: unknown) => { mkdirSync(".data/dual-recovery", { recursive: true, mode: 0o700 }); writeFileSync(".data/dual-recovery/claim-discovery-checkpoint.json", JSON.stringify(value, null, 2), { mode: 0o600 }); };
 
-type Page = { source: string; title: string; url: string; body: string; publishedAt?: string };
+type Page = { source: string; title: string; url: string; body: string; publishedAt?: string; extracted?: StageAItem[]; nextCandidateIndex?: number };
 type Audit = { source: string; title: string; url: string; candidate: StageAItem; stageB: unknown; decision: ReturnType<typeof decideClaimGate>; claimZhReady: boolean; inserted: boolean; error?: string };
 
 async function retryJudge<S extends z.ZodType>(purpose: string, subject: string, system: string, input: unknown, schema: S, maxTokens: number) {
@@ -56,7 +56,7 @@ async function discoverPages(cutoff: number): Promise<Page[]> {
   // with cached pages when a wider audit is needed.
   for (const page of pages) await sql`INSERT INTO radar_discovery_queue(stream,source_family,source_item_id,source_url,payload,priority,content_hash)
     VALUES('claim_page',${page.source},${publicCanonical(page.url)},${publicCanonical(page.url)},${sql.json(page as never)},${page.source === 'NVIDIA' ? 80 : 50},md5(${`${page.url}|${page.publishedAt ?? ''}`}))
-    ON CONFLICT(stream,source_item_id) DO UPDATE SET payload=EXCLUDED.payload,source_url=EXCLUDED.source_url,updated_at=now(),
+    ON CONFLICT(stream,source_item_id) DO UPDATE SET payload=CASE WHEN radar_discovery_queue.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN EXCLUDED.payload ELSE radar_discovery_queue.payload END,source_url=EXCLUDED.source_url,updated_at=now(),
       status=CASE WHEN radar_discovery_queue.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN 'pending' ELSE radar_discovery_queue.status END,
       content_hash=EXCLUDED.content_hash`;
   const leased = await leaseQueueBatch<Page>("claim_page", 4);
@@ -73,7 +73,8 @@ async function main() {
   const cached = process.argv.includes("--cached");
   const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
   const pages = cached ? cachedPages() : await discoverPages(cutoff);
-  const funnel: Record<string, number> = { pages_discovered: pages.length, pages_deduped: 0, pages_fetch_ok: 0, pages_fetch_failed: 0, pages_with_enough_text: 0, extract_success_pages: 0, extract_zero_pages: 0, extract_model_error_pages: 0, candidate_statements: 0, gate_eligible: 0, gate_rejected: 0, gate_needs_review: 0, inserted: 0, duplicates: 0 };
+  const statementBudget = Math.max(1, Math.min(Number(process.env.CLAIM_DISCOVERY_STATEMENT_MAX ?? 2), 8));
+  const funnel: Record<string, number> = { pages_discovered: pages.length, pages_deduped: 0, pages_fetch_ok: 0, pages_fetch_failed: 0, pages_with_enough_text: 0, extract_success_pages: 0, extract_zero_pages: 0, extract_model_error_pages: 0, candidate_statements: 0, deferred_statements: 0, gate_eligible: 0, gate_rejected: 0, gate_needs_review: 0, inserted: 0, duplicates: 0 };
   const errors: Record<string, number> = {};
   const audits: Audit[] = [];
   const seenPages = new Set<string>();
@@ -89,16 +90,20 @@ async function main() {
     funnel.pages_with_enough_text++;
     const start = body.search(/\b(Introducing|delivers|available|faster|benchmark|tokens|percent|%|model|throughput|cost)\b/i);
     const context = `${body.slice(0, 700)}\n${body.slice(Math.max(0, start), Math.max(0, start) + 3600)}`;
-    let extracted: StageAItem[];
-    try {
+    let extracted: StageAItem[] = page.extracted ?? [];
+    if (!page.extracted) try {
       const result = await retryJudge("claim_stage_a_v2", `stage-a:${canonical}`, "从官方或研究页面正文中找出最多 8 条值得进入 Claim Gate 的完整陈述。每条必须逐字来自正文，保留数字和限定条件。补充 speaker（页面明确的公司/作者/发布者；不能确定则 null）、evidence_span（短原文片段）、claim_type_hint、verifiable、attributable、specific、material、atomic_enough、interest_hint。普通公告、项目介绍、方法背景可以列出但标 verifiable=false。没有就返回 items 空数组。严格 JSON。", { source: page.source, title: page.title, url: page.url, text: context }, StageASchema, 1100);
       extracted = normalizeStageA(result.data);
       funnel.extract_success_pages += extracted.length ? 1 : 0;
       funnel.extract_zero_pages += extracted.length ? 0 : 1;
     } catch (error) { funnel.extract_model_error_pages++; errors[extractionErrorClass(error)] = (errors[extractionErrorClass(error)] ?? 0) + 1; await finishQueueItem("claim_page", canonical, "retryable", safeError(error)); continue; }
-    funnel.candidate_statements += extracted.length;
-    for (let candidateIndex = 0; candidateIndex < extracted.length; candidateIndex++) {
-      const candidate = extracted[candidateIndex]!;
+    const startIndex = page.nextCandidateIndex ?? 0;
+    const batch = extracted.slice(startIndex, startIndex + statementBudget);
+    funnel.candidate_statements += batch.length;
+    funnel.deferred_statements += Math.max(0, extracted.length - startIndex - batch.length);
+    for (let offset = 0; offset < batch.length; offset++) {
+      const candidateIndex = startIndex + offset;
+      const candidate = batch[offset]!;
       let stageB: any = null;
       let decision: ReturnType<typeof decideClaimGate>;
       let errorText: string | undefined;
@@ -134,7 +139,11 @@ async function main() {
       audits.push({ source: page.source, title: page.title, url: canonical, candidate, stageB, decision, claimZhReady, inserted, error: errorText });
     }
     const pageNeedsRetry = audits.some((item) => item.url === canonical && (item.error || item.decision.decision === "model_error"));
-    await finishQueueItem("claim_page", canonical, pageNeedsRetry ? "retryable" : "done");
+    const hasRemaining = startIndex + batch.length < extracted.length;
+    if (hasRemaining && !cached) {
+      await sql`UPDATE radar_discovery_queue SET payload=${sql.json({ ...page, extracted, nextCandidateIndex: startIndex + batch.length } as never)},updated_at=now() WHERE stream='claim_page' AND source_item_id=${canonical}`;
+    }
+    await finishQueueItem("claim_page", canonical, pageNeedsRetry || hasRemaining ? "retryable" : "done", hasRemaining ? "candidate_budget_remaining" : null);
   }
   writeFileSync(".data/dual-recovery/claim-discovery-audit.json", JSON.stringify({ cached, funnel, errors, audits }, null, 2), { mode: 0o600 });
   checkpoint({ ...funnel, errors, cached, completedAt: new Date().toISOString() });
