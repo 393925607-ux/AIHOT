@@ -35,6 +35,12 @@ function demandTitle(theme: Theme) {
   return "";
 }
 
+function evidenceLabel(theme: Theme) {
+  if (theme.demandState === "single_signal") return "单点信号";
+  if (theme.independentThreadCount === 1 && theme.independentPlatformCount === 1) return "同一线程多人";
+  return "多人多源";
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url); const offset = Math.max(Number(url.searchParams.get("offset") ?? 0) || 0, 0); const sort = url.searchParams.get("sort") === "evidence" ? "evidence" : "latest";
   return loadOr404<DemandResponse>(`/api/site/demands?limit=50&offset=${offset}&sort=${sort}`, { signal: request.signal });
@@ -77,7 +83,7 @@ export default function DemandsPage() {
                   <div className="border-b border-line-soft px-5 py-4 sm:px-6">
                     <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[17px] font-bold text-ink">{demandTitle(theme)}</h3><span className="text-[12px] text-ink-4"><b className="num text-ink-2">{theme.independentUserCount}</b> 个独立用户 · <b className="num text-ink-2">{theme.independentThreadCount}</b> 个独立线程</span></div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>{theme.demandState === "multi_user" ? "多人佐证" : "单点信号"} · {theme.independentRepoCount} 个仓库 · {theme.independentPlatformCount} 个来源平台 · 最近活跃：{formatShanghaiTime(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[12px] text-ink-4 sm:px-6"><span>{evidenceLabel(theme)} · {theme.independentRepoCount} 个仓库 · {theme.independentPlatformCount} 个来源平台 · 最近活跃：{formatShanghaiTime(theme.latestAt)}</span><span className="text-accent">查看详情 →</span></div>
                 </Link>
               ))}
             </div>
