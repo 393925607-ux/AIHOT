@@ -3,12 +3,12 @@
   "generatedAt": "2026-10-03",
   "coreVendors": [
     { "vendor": "OpenAI", "affectedProducts": ["Codex", "ChatGPT"], "sourcePaths": ["GitHub Issues", "OpenAI Community RSS", "Hacker News"], "status": "ACTIVE", "evidence": "live DB source_kind and timer run" },
-    { "vendor": "Anthropic", "affectedProducts": ["Claude Code", "Claude Desktop"], "sourcePaths": ["GitHub Issues", "Stack Exchange"], "status": "CONNECTED", "evidence": "live user-source paths; official vendor path not separately active" },
-    { "vendor": "Google", "affectedProducts": ["Gemini"], "sourcePaths": ["DeepMind official RSS", "GitHub/Stack Exchange probe"], "status": "PROBED_READABLE", "evidence": "claim discovery official feed; no separate Demand family yet" },
-    { "vendor": "xAI", "affectedProducts": ["Grok"], "sourcePaths": ["public claim/evidence links"], "status": "NOT_PROBED", "evidence": "no stable user adapter connected in this run" },
+    { "vendor": "Anthropic", "affectedProducts": ["Claude Code", "Claude Desktop"], "sourcePaths": ["GitHub Issues", "Stack Exchange", "official news probe"], "status": "CONNECTED", "evidence": ".data/final-closeout/vendor-probe.json: community and independent paths readable; no separate production official adapter" },
+    { "vendor": "Google", "affectedProducts": ["Gemini"], "sourcePaths": ["DeepMind official RSS", "GitHub/Stack Exchange probe", "independent model analysis"], "status": "PROBED_READABLE", "evidence": ".data/final-closeout/vendor-probe.json: four required paths probed; no separate Demand family yet" },
+    { "vendor": "xAI", "affectedProducts": ["Grok"], "sourcePaths": ["xAI official news", "GitHub/Stack Exchange probe", "independent model analysis"], "status": "PROBED_READABLE", "evidence": ".data/final-closeout/vendor-probe.json: official, community, and independent pages readable; no stable developer issue stream" },
     { "vendor": "Microsoft/GitHub", "affectedProducts": ["GitHub Copilot", "Windows ChatGPT"], "sourcePaths": ["GitHub Issues", "Stack Exchange"], "status": "CONNECTED", "evidence": "live user-source paths; vendor-specific matrix pending" },
-    { "vendor": "DeepSeek", "affectedProducts": ["DeepSeek"], "sourcePaths": ["public claim/evidence links"], "status": "NOT_PROBED", "evidence": "no stable user adapter connected in this run" },
-    { "vendor": "Alibaba", "affectedProducts": ["Qwen"], "sourcePaths": ["official/secondary Claim URLs"], "status": "PROBED_READABLE", "evidence": "Claim source and original URL review" }
+    { "vendor": "DeepSeek", "affectedProducts": ["DeepSeek"], "sourcePaths": ["DeepSeek official docs", "GitHub/Stack Exchange probe", "independent model analysis"], "status": "PROBED_READABLE", "evidence": ".data/final-closeout/vendor-probe.json: four required paths probed; no separate production Demand adapter" },
+    { "vendor": "Alibaba", "affectedProducts": ["Qwen"], "sourcePaths": ["Qwen official blog", "GitHub/Stack Exchange probe", "independent model analysis"], "status": "PROBED_READABLE", "evidence": ".data/final-closeout/vendor-probe.json: official, developer, and independent pages readable; no stable Stack Exchange Qwen tag results" }
   ],
   "sourceFamilies": [
     { "family": "github_issues_comments", "status": "ACTIVE" },

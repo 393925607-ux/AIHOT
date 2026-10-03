@@ -1,5 +1,5 @@
 /** Private, explicit-input Inbox. Dry-run is the default and never writes DB/public APIs. */
-import { mkdirSync, readFileSync, appendFileSync, realpathSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, appendFileSync, realpathSync, statSync, chmodSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { guardedFetch } from "@aihot/backend/lib/http-fetch";
 import { buildPrivateRecord } from "@aihot/backend/insights/personal";
@@ -19,8 +19,13 @@ async function main() {
   if (text.length < 20) throw new Error("输入内容太短，拒绝写入");
   const record = buildPrivateRecord({ sourceUrl: url, textFile: safeFile ? basename(safeFile) : null, hint, text, ownTest });
   if (apply) {
-    const dir = resolve(".data/private"); mkdirSync(dir, { recursive: true, mode: 0o700 }); appendFileSync(`${dir}/inbox.jsonl`, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    const dir = resolve(".data/private");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    const inbox = `${dir}/inbox.jsonl`;
+    appendFileSync(inbox, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    chmodSync(inbox, 0o600);
   }
-  console.log(JSON.stringify({ ok: true, mode: apply ? "applied_private" : "dry_run", privacy: "private", ownTest, contentHash: record.contentHash, textLength: record.textLength }));
+  console.log(JSON.stringify({ ok: true, mode: apply ? "applied_private" : "dry_run", privacy: "private", classify: record.classify, reviewStatus: record.reviewStatus, ownTest, contentHash: record.contentHash, textLength: record.textLength }));
 }
 try { await main(); } catch (error) { console.error(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : "inbox_error" })); process.exitCode = 1; }
